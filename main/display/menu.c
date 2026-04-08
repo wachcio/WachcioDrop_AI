@@ -1,12 +1,15 @@
 #include "menu.h"
 #include "display.h"
 #include "valve/valve.h"
+#include "leds/leds.h"
 #include "rtc/rtc.h"
 #include "wifi/wifi_manager.h"
+#include "encoder/encoder.h"
 #include "config.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
@@ -35,35 +38,34 @@ static const char *MAIN_MENU[] = {
 
 static void draw_home(void)
 {
-    char buf[20];
+    char buf[32];
     display_clear();
 
-    // Wiersz 0: czas
+    // Wiersz 0: czas (strftime unika format-truncation warnings)
     struct tm t = {0};
     rtc_get_time(&t);
-    snprintf(buf, sizeof(buf), "%02d:%02d  %02d-%02d-%04d",
-             t.tm_hour, t.tm_min,
-             t.tm_mday, t.tm_mon + 1, t.tm_year + 1900);
+    strftime(buf, sizeof(buf), "%H:%M %d-%m-%Y", &t);
     display_text(0, 0, buf, false);
 
     // Wiersz 1: separator
     display_hline(0, 9, DISPLAY_W);
 
-    // Wiersz 2: stan sekcji (0=master, 1-8=sekcje)
+    // Wiersz 2: stan sekcji (0=master, 1-8=sekcje) - 16 znaków max
     uint8_t mask = valve_get_active_mask();
-    snprintf(buf, sizeof(buf), "M:%c 1:%c 2:%c 3:%c 4:%c",
-             (leds_get() & BIT_MASTER)    ? '#' : '-',
-             (mask & (1 << 0))            ? '#' : '-',
-             (mask & (1 << 1))            ? '#' : '-',
-             (mask & (1 << 2))            ? '#' : '-',
-             (mask & (1 << 3))            ? '#' : '-');
+    bool master  = (mask != 0);
+    // Format: "M:# 1:# 2:# 3:#" = 16 znaków
+    buf[0]  = 'M'; buf[1]  = ':'; buf[2]  = master          ? '#' : '-'; buf[3]  = ' ';
+    buf[4]  = '1'; buf[5]  = ':'; buf[6]  = (mask & 1)       ? '#' : '-'; buf[7]  = ' ';
+    buf[8]  = '2'; buf[9]  = ':'; buf[10] = (mask & 2)       ? '#' : '-'; buf[11] = ' ';
+    buf[12] = '3'; buf[13] = ':'; buf[14] = (mask & 4)       ? '#' : '-'; buf[15] = ' ';
+    buf[16] = '\0';
     display_text(0, 2, buf, false);
 
-    snprintf(buf, sizeof(buf), "5:%c 6:%c 7:%c 8:%c",
-             (mask & (1 << 4)) ? '#' : '-',
-             (mask & (1 << 5)) ? '#' : '-',
-             (mask & (1 << 6)) ? '#' : '-',
-             (mask & (1 << 7)) ? '#' : '-');
+    buf[0]  = '4'; buf[1]  = ':'; buf[2]  = (mask & 8)   ? '#' : '-'; buf[3]  = ' ';
+    buf[4]  = '5'; buf[5]  = ':'; buf[6]  = (mask & 16)  ? '#' : '-'; buf[7]  = ' ';
+    buf[8]  = '6'; buf[9]  = ':'; buf[10] = (mask & 32)  ? '#' : '-'; buf[11] = ' ';
+    buf[12] = '7'; buf[13] = ':'; buf[14] = (mask & 64)  ? '#' : '-'; buf[15] = ' ';
+    buf[16] = '\0';
     display_text(0, 3, buf, false);
 
     // Wiersz 5: WiFi status

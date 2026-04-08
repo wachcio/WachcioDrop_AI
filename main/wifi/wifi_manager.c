@@ -108,7 +108,7 @@ void wifi_manager_task(void *arg)
 {
     ESP_LOGI(TAG, "task started");
 
-    // Wczytaj konfigurację
+    // Użyj globalnej konfiguracji
     app_config_t *cfg = &g_config;
 
     bool has_creds = (cfg->wifi_ssid[0] != '\0');

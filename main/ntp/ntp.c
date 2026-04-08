@@ -3,6 +3,7 @@
 #include "wifi/wifi_manager.h"
 #include "storage/nvs_storage.h"
 #include "config.h"
+#include "esp_netif_sntp.h"
 #include "esp_sntp.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
@@ -16,7 +17,7 @@ extern app_config_t g_config;
 
 static volatile bool s_synced = false;
 
-static void sntp_callback(struct timeval *tv)
+static void sntp_sync_cb(struct timeval *tv)
 {
     s_synced = true;
     ESP_LOGI(TAG, "SNTP sync done, unix=%lld", (long long)tv->tv_sec);
@@ -38,14 +39,14 @@ void ntp_task(void *arg)
             vTaskDelay(pdMS_TO_TICKS(2000));
         }
 
-        const char *ntp_server = g_config.ntp_server[0] != '\0'
+        const char *ntp_server = (g_config.ntp_server[0] != '\0')
                                   ? g_config.ntp_server
                                   : DEFAULT_NTP_SERVER;
         int8_t tz = g_config.timezone_offset;
 
         ESP_LOGI(TAG, "syncing with %s (UTC%+d)...", ntp_server, tz);
 
-        // Ustaw strefę czasową jako zmienną środowiskową POSIX
+        // Ustaw strefę czasową (POSIX TZ string)
         char tz_str[32];
         if (tz >= 0) {
             snprintf(tz_str, sizeof(tz_str), "UTC-%d", tz);
@@ -55,28 +56,28 @@ void ntp_task(void *arg)
         setenv("TZ", tz_str, 1);
         tzset();
 
-        // Uruchom SNTP
-        esp_sntp_setoperatingmode(SNTP_OPMODE_POLL);
-        esp_sntp_setservername(0, ntp_server);
-        sntp_set_time_sync_notification_cb(sntp_callback);
-        esp_sntp_init();
+        // ESP-IDF 5.x SNTP API
+        esp_sntp_config_t sntp_cfg = ESP_NETIF_SNTP_DEFAULT_CONFIG(ntp_server);
+        sntp_cfg.sync_cb = sntp_sync_cb;
+        s_synced = false;
+
+        esp_netif_sntp_init(&sntp_cfg);
 
         // Czekaj na synchronizację (max 30s)
-        int timeout = 30;
-        s_synced    = false;
-        while (!s_synced && timeout-- > 0) {
-            vTaskDelay(pdMS_TO_TICKS(1000));
-        }
+        esp_err_t err = esp_netif_sntp_sync_wait(pdMS_TO_TICKS(30000));
 
-        if (s_synced) {
+        if (err == ESP_OK || s_synced) {
             time_t now = time(NULL);
             rtc_set_time_unix(now);
-            ESP_LOGI(TAG, "DS3231 updated from NTP: %s", ctime(&now));
+            struct tm *t = localtime(&now);
+            char tstr[32];
+            strftime(tstr, sizeof(tstr), "%Y-%m-%d %H:%M:%S", t);
+            ESP_LOGI(TAG, "DS3231 updated: %s", tstr);
         } else {
             ESP_LOGW(TAG, "NTP sync timeout");
         }
 
-        esp_sntp_stop();
+        esp_netif_sntp_deinit();
 
         // Następna synchronizacja za 24h
         vTaskDelay(pdMS_TO_TICKS(NTP_SYNC_INTERVAL_MS));

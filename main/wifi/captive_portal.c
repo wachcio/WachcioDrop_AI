@@ -6,7 +6,7 @@
 #include "esp_http_server.h"
 #include "esp_log.h"
 #include "lwip/sockets.h"
-#include "lwip/dns.h"
+#include "lwip/inet.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include <string.h>

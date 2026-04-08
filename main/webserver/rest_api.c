@@ -1,6 +1,13 @@
 #include "rest_api.h"
 #include "file_server.h"
 #include "valve/valve.h"
+#include "leds/leds.h"
+#include "config.h"
+#include "esp_timer.h"
+
+#ifndef MIN
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+#endif
 #include "schedule/schedule.h"
 #include "groups/groups.h"
 #include "storage/nvs_storage.h"

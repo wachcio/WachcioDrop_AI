@@ -75,9 +75,8 @@ static void check_and_fire(const struct tm *now)
         return;
     }
 
-    uint8_t day_bit = (uint8_t)(1 << now->tm_wday); // tm_wday: 0=Nie, 1=Pon...
-    // Przelicz na bit0=Pon...bit6=Nie
-    uint8_t sched_day = (now->tm_wday == 0) ? (1 << 6) : (1 << (now->tm_wday - 1));
+    // Przelicz na bit0=Pon...bit6=Nie (tm_wday: 0=Nie, 1=Pon...)
+    uint8_t sched_day = (now->tm_wday == 0) ? (1 << 6) : (uint8_t)(1 << (now->tm_wday - 1));
 
     xSemaphoreTake(s_mutex, portMAX_DELAY);
     for (int i = 0; i < SCHEDULE_ENTRIES; i++) {

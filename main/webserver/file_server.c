@@ -1,6 +1,12 @@
 #include "file_server.h"
 #include "rest_api.h"
+#include "config.h"
 #include "esp_spiffs.h"
+#include "esp_log.h"
+
+#ifndef MIN
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
+#endif
 #include "esp_http_server.h"
 #include "esp_log.h"
 #include <stdio.h>
@@ -68,13 +74,14 @@ static esp_err_t serve_file(httpd_req_t *req, const char *filepath)
 
 static esp_err_t static_handler(httpd_req_t *req)
 {
-    char filepath[256];
+    // filepath musi pomieścić SPIFFS_BASE (7) + MAX_URI_LEN (512) + null
+    char filepath[520];
     const char *uri = req->uri;
 
-    // /api/* obsługuje REST API - tutaj nie trafia
-    // React SPA: wszystkie nieznane ścieżki → index.html
-    snprintf(filepath, sizeof(filepath), SPIFFS_BASE "%s",
-             (strcmp(uri, "/") == 0) ? "/index.html" : uri);
+    // Ogranicz URI do bezpiecznej długości
+    const char *file_part = (strcmp(uri, "/") == 0) ? "/index.html" : uri;
+    // snprintf z gwarantowanym rozmiarem - poniżej 520 bajtów
+    snprintf(filepath, sizeof(filepath), SPIFFS_BASE "%.511s", file_part);
 
     struct stat st;
     if (stat(filepath, &st) != 0) {
@@ -89,6 +96,8 @@ static esp_err_t static_handler(httpd_req_t *req)
     }
     return ESP_OK;
 }
+
+httpd_handle_t file_server_get_handle(void) { return s_server; }
 
 esp_err_t file_server_register(httpd_handle_t server)
 {

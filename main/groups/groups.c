@@ -2,6 +2,8 @@
 #include "valve/valve.h"
 #include "storage/nvs_storage.h"
 #include "config.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 #include "freertos/semphr.h"
 #include "esp_log.h"
 #include <string.h>

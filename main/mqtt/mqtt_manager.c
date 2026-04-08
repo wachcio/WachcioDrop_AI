@@ -1,5 +1,6 @@
 #include "mqtt_manager.h"
 #include "valve/valve.h"
+#include "leds/leds.h"
 #include "schedule/schedule.h"
 #include "groups/groups.h"
 #include "wifi/wifi_manager.h"
@@ -8,6 +9,7 @@
 #include "mqtt_client.h"
 #include "cJSON.h"
 #include "esp_log.h"
+#include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
@@ -37,14 +39,16 @@ static void publish_ha_discovery(void)
 {
     if (!s_connected) return;
 
-    char topic[128], payload[512];
+    char topic[128];
 
     // Discovery dla każdej sekcji
     for (int i = 0; i <= SECTIONS_COUNT; i++) {
-        const char *name  = (i == 0) ? "Master" : NULL;
         char sec_name[32];
-        if (i > 0) snprintf(sec_name, sizeof(sec_name), "Sekcja %d", i);
-        if (i == 0) strncpy(sec_name, "Master", sizeof(sec_name));
+        if (i == 0) {
+            strncpy(sec_name, "Master", sizeof(sec_name));
+        } else {
+            snprintf(sec_name, sizeof(sec_name), "Sekcja %d", i);
+        }
 
         char uid[32], obj_id[32];
         if (i == 0) {

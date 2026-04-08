@@ -34,7 +34,8 @@ idf_component_register(
         app_update
         json
         esp_timer
-        esp_sntp
+        lwip
+        i2cdev
         ds3231
         ssd1306
 )

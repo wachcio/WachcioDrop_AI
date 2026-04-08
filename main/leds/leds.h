@@ -1,5 +1,6 @@
 #pragma once
 #include <stdint.h>
+#include <stdbool.h>
 #include "esp_err.h"
 
 // 74HC595 16-bit driver (2 chipy daisy-chain)

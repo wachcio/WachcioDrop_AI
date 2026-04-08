@@ -6,7 +6,7 @@
 // Wrapper nad DS3231 z esp-idf-lib
 // Zapewnia: inicjalizację I2C, get/set time, sync z NTP
 
-esp_err_t rtc_init(void);
+esp_err_t rtc_ds3231_init(void);
 
 // Pobierz czas z DS3231 i ustaw systemowy czas Unix (settimeofday)
 esp_err_t rtc_get_time(struct tm *out_tm);
