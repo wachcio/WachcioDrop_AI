@@ -1,0 +1,40 @@
+idf_component_register(
+    SRCS
+        "main.c"
+        "leds/leds.c"
+        "valve/valve.c"
+        "rtc/rtc.c"
+        "encoder/encoder.c"
+        "display/display.c"
+        "display/menu.c"
+        "storage/nvs_storage.c"
+        "schedule/schedule.c"
+        "groups/groups.c"
+        "wifi/wifi_manager.c"
+        "wifi/captive_portal.c"
+        "ntp/ntp.c"
+        "webserver/rest_api.c"
+        "webserver/file_server.c"
+        "mqtt/mqtt_manager.c"
+        "daily_check/daily_check.c"
+
+    INCLUDE_DIRS
+        "."
+
+    REQUIRES
+        nvs_flash
+        driver
+        esp_wifi
+        esp_netif
+        esp_event
+        esp_http_server
+        esp_http_client
+        mqtt
+        spiffs
+        app_update
+        json
+        esp_timer
+        esp_sntp
+        ds3231
+        ssd1306
+)

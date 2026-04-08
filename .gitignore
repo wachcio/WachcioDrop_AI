@@ -1,0 +1,13 @@
+build/
+sdkconfig
+sdkconfig.old
+*.pyc
+__pycache__/
+.idea/
+.vscode/settings.json
+frontend/node_modules/
+frontend/dist/
+spiffs_image/
+*.bin
+*.elf
+*.map
