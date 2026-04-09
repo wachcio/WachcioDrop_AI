@@ -292,6 +292,32 @@ Odpowiedź (potwierdzenie ustawionego czasu):
 
 ---
 
+### POST /api/time/sntp
+Wymuś natychmiastową synchronizację czasu z serwera NTP i zapisz do RTC. Blokuje do 30s.
+
+```bash
+curl -X POST \
+  -H "Authorization: Bearer TOKEN" \
+  http://192.168.20.230/api/time/sntp
+```
+
+Odpowiedź (sukces):
+```json
+{"ok": true, "time": "2025-06-15T10:30:05", "unix": 1750000205}
+```
+
+Odpowiedź (brak WiFi):
+```json
+{"error": "no WiFi connection"}   // HTTP 503
+```
+
+Odpowiedź (timeout):
+```json
+{"error": "NTP sync timeout"}     // HTTP 504
+```
+
+---
+
 ## Ustawienia
 
 ### GET /api/settings

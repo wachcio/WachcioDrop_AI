@@ -6,5 +6,9 @@
 
 esp_err_t ntp_init(void);
 
+// Wymuś natychmiastową synchronizację NTP → DS3231 (blokuje max 30s)
+// Zwraca ESP_OK jeśli sync się udał, ESP_ERR_TIMEOUT jeśli nie
+esp_err_t ntp_force_sync(void);
+
 // Task - uruchomić z main po połączeniu WiFi
 void ntp_task(void *arg);

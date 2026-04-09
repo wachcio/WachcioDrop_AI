@@ -29,6 +29,41 @@ esp_err_t ntp_init(void)
     return ESP_OK;
 }
 
+esp_err_t ntp_force_sync(void)
+{
+    if (wifi_get_state() != WIFI_STATE_CONNECTED) {
+        ESP_LOGW(TAG, "force sync: no WiFi");
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    const char *ntp_server = (g_config.ntp_server[0] != '\0')
+                              ? g_config.ntp_server
+                              : DEFAULT_NTP_SERVER;
+
+    ESP_LOGI(TAG, "force sync with %s...", ntp_server);
+
+    esp_sntp_config_t sntp_cfg = ESP_NETIF_SNTP_DEFAULT_CONFIG(ntp_server);
+    sntp_cfg.sync_cb = sntp_sync_cb;
+    s_synced = false;
+
+    esp_netif_sntp_init(&sntp_cfg);
+    esp_err_t err = esp_netif_sntp_sync_wait(pdMS_TO_TICKS(30000));
+    esp_netif_sntp_deinit();
+
+    if (err == ESP_OK || s_synced) {
+        time_t now = time(NULL);
+        rtc_set_time_unix(now);
+        struct tm *t = localtime(&now);
+        char tstr[32];
+        strftime(tstr, sizeof(tstr), "%Y-%m-%d %H:%M:%S", t);
+        ESP_LOGI(TAG, "force sync OK: %s", tstr);
+        return ESP_OK;
+    }
+
+    ESP_LOGW(TAG, "force sync timeout");
+    return ESP_ERR_TIMEOUT;
+}
+
 void ntp_task(void *arg)
 {
     ESP_LOGI(TAG, "task started");

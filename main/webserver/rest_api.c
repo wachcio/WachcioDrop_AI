@@ -12,6 +12,7 @@
 #include "groups/groups.h"
 #include "storage/nvs_storage.h"
 #include "rtc/rtc.h"
+#include "ntp/ntp.h"
 #include "wifi/wifi_manager.h"
 #include "config.h"
 #include "cJSON.h"
@@ -556,6 +557,43 @@ static esp_err_t handle_time_post(httpd_req_t *req)
 }
 
 // --------------------------------------------------------------------------
+// POST /api/time/sntp
+// --------------------------------------------------------------------------
+static esp_err_t handle_time_sntp(httpd_req_t *req)
+{
+    CHECK_AUTH(req);
+
+    esp_err_t err = ntp_force_sync();
+
+    if (err == ESP_ERR_INVALID_STATE) {
+        httpd_resp_set_status(req, "503 Service Unavailable");
+        JSON_RESP(req, "{\"error\":\"no WiFi connection\"}");
+        return ESP_OK;
+    }
+    if (err != ESP_OK) {
+        httpd_resp_set_status(req, "504 Gateway Timeout");
+        JSON_RESP(req, "{\"error\":\"NTP sync timeout\"}");
+        return ESP_OK;
+    }
+
+    time_t now = time(NULL);
+    struct tm t_local;
+    localtime_r(&now, &t_local);
+    char tstr[32];
+    strftime(tstr, sizeof(tstr), "%Y-%m-%dT%H:%M:%S", &t_local);
+
+    cJSON *resp = cJSON_CreateObject();
+    cJSON_AddBoolToObject(resp,   "ok",   true);
+    cJSON_AddStringToObject(resp, "time", tstr);
+    cJSON_AddNumberToObject(resp, "unix", (double)now);
+    char *s = cJSON_PrintUnformatted(resp);
+    JSON_RESP(req, s);
+    free(s);
+    cJSON_Delete(resp);
+    return ESP_OK;
+}
+
+// --------------------------------------------------------------------------
 // POST /api/ota
 // --------------------------------------------------------------------------
 static esp_err_t handle_ota(httpd_req_t *req)
@@ -637,6 +675,7 @@ esp_err_t rest_api_register(httpd_handle_t server)
 
     REG("/api/time",                   HTTP_GET,    handle_time_get);
     REG("/api/time",                   HTTP_POST,   handle_time_post);
+    REG("/api/time/sntp",              HTTP_POST,   handle_time_sntp);
 
     REG("/api/ota",                    HTTP_POST,   handle_ota);
 
