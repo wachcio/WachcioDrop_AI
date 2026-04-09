@@ -44,17 +44,13 @@ void ntp_task(void *arg)
                                   : DEFAULT_NTP_SERVER;
         int8_t tz = g_config.timezone_offset;
 
-        ESP_LOGI(TAG, "syncing with %s (UTC%+d)...", ntp_server, tz);
-
-        // Ustaw strefę czasową (POSIX TZ string)
-        char tz_str[32];
-        if (tz >= 0) {
-            snprintf(tz_str, sizeof(tz_str), "UTC-%d", tz);
-        } else {
-            snprintf(tz_str, sizeof(tz_str), "UTC+%d", -tz);
-        }
-        setenv("TZ", tz_str, 1);
+        // Strefa czasowa: Polska = CET/CEST z automatycznym DST
+        // Ignoruj timezone_offset — używamy pełnego POSIX TZ string
+        (void)tz;
+        const char *posix_tz = "CET-1CEST,M3.5.0,M10.5.0/3";
+        setenv("TZ", posix_tz, 1);
         tzset();
+        ESP_LOGI(TAG, "syncing with %s (TZ: %s)...", ntp_server, posix_tz);
 
         // ESP-IDF 5.x SNTP API
         esp_sntp_config_t sntp_cfg = ESP_NETIF_SNTP_DEFAULT_CONFIG(ntp_server);

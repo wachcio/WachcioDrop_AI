@@ -5,6 +5,25 @@
 #include <string.h>
 #include <time.h>
 #include <sys/time.h>
+#include <stdlib.h>
+
+// timegm nie istnieje w newlib — własna implementacja UTC struct tm → unix timestamp
+static time_t utc_mktime(struct tm *tm)
+{
+    // Skopiuj aktualną TZ żeby ją przywrócić
+    char tz_save[64] = {0};
+    const char *tz = getenv("TZ");
+    if (tz) strncpy(tz_save, tz, sizeof(tz_save) - 1);
+
+    setenv("TZ", "UTC0", 1);
+    tzset();
+    time_t t = mktime(tm);
+
+    if (tz_save[0]) setenv("TZ", tz_save, 1);
+    else            unsetenv("TZ");
+    tzset();
+    return t;
+}
 
 static const char *TAG = "rtc";
 static i2c_dev_t s_dev;
@@ -26,11 +45,13 @@ esp_err_t rtc_ds3231_init(void)
     }
 
     // Ustaw systemowy czas z DS3231 przy starcie
+    // DS3231 przechowuje UTC — używamy timegm (nie mktime) żeby uniknąć
+    // podwójnej korekcji strefy czasowej
     struct tm t = {0};
     err = ds3231_get_time(&s_dev, &t);
     if (err == ESP_OK) {
         s_available = true;
-        struct timeval tv = { .tv_sec = mktime(&t), .tv_usec = 0 };
+        struct timeval tv = { .tv_sec = utc_mktime(&t), .tv_usec = 0 };
         settimeofday(&tv, NULL);
         ESP_LOGI(TAG, "time loaded from DS3231: %04d-%02d-%02d %02d:%02d:%02d",
                  t.tm_year + 1900, t.tm_mon + 1, t.tm_mday,
@@ -67,7 +88,8 @@ esp_err_t rtc_set_time(const struct tm *tm)
     struct tm writable = *tm;
     esp_err_t err = ds3231_set_time(&s_dev, &writable);
     if (err == ESP_OK) {
-        struct timeval tv = { .tv_sec = mktime(&writable), .tv_usec = 0 };
+        // tm zawiera UTC — timegm konwertuje UTC struct tm → unix timestamp
+        struct timeval tv = { .tv_sec = utc_mktime(&writable), .tv_usec = 0 };
         settimeofday(&tv, NULL);
         ESP_LOGI(TAG, "time set: %04d-%02d-%02d %02d:%02d:%02d",
                  tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday,

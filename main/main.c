@@ -16,6 +16,8 @@
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include <stdlib.h>
+#include <time.h>
 
 static const char *TAG = "main";
 
@@ -55,6 +57,9 @@ void app_main(void)
     // ------------------------------------------------------------------
     // 4. RTC DS3231
     // ------------------------------------------------------------------
+    // Ustaw strefę czasową przed init RTC (Polska: CET/CEST z DST)
+    setenv("TZ", "CET-1CEST,M3.5.0,M10.5.0/3", 1);
+    tzset();
     ESP_ERROR_CHECK(rtc_ds3231_init());
 
     // ------------------------------------------------------------------

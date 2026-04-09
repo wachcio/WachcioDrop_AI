@@ -94,10 +94,12 @@ static esp_err_t handle_status(httpd_req_t *req)
                           (bool)(leds_get() & BIT_MASTER));
     cJSON_AddBoolToObject(root,   "irrigation_today", g_irrigation_today);
 
-    struct tm t = {0};
-    rtc_get_time(&t);
+    // Pobierz czas systemowy (Unix timestamp, już uwzględnia DST po setenv TZ)
+    time_t now = time(NULL);
+    struct tm t_local;
+    localtime_r(&now, &t_local);
     char tstr[32];
-    strftime(tstr, sizeof(tstr), "%Y-%m-%dT%H:%M:%S", &t);
+    strftime(tstr, sizeof(tstr), "%Y-%m-%dT%H:%M:%S", &t_local);
     cJSON_AddStringToObject(root, "time", tstr);
 
     char *s = cJSON_PrintUnformatted(root);

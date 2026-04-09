@@ -40,9 +40,10 @@ static void draw_home(void)
 {
     char buf[32];
 
-    // Wiersz 0: czas
-    struct tm t = {0};
-    rtc_get_time(&t);
+    // Wiersz 0: czas — używaj zegara systemowego (zsync z DS3231/NTP), bez I2C co 100ms
+    time_t now = time(NULL);
+    struct tm t;
+    localtime_r(&now, &t);
     strftime(buf, sizeof(buf), "%H:%M %d-%m-%Y", &t);
     display_text_full(0, buf, false);
 
