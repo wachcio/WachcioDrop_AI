@@ -133,60 +133,58 @@ static esp_err_t handle_sections_get(httpd_req_t *req)
 }
 
 // --------------------------------------------------------------------------
-// POST /api/sections/{id}/on   POST /api/sections/{id}/off
-// POST /api/sections/all/off
+// POST /api/sections/*
+// Obsługuje: /api/sections/{id}/on  /api/sections/{id}/off  /api/sections/all/off
+// Uwaga: httpd_uri_match_wildcard obsługuje '*' tylko na końcu wzorca,
+//        dlatego używamy jednego handlera z dispatching po URI.
 // --------------------------------------------------------------------------
-static esp_err_t handle_section_on(httpd_req_t *req)
-{
-    CHECK_AUTH(req);
-
-    // Wyciągnij id z URI: /api/sections/{id}/on
-    const char *uri = req->uri;
-    int section_id = 0;
-    sscanf(uri, "/api/sections/%d/on", &section_id);
-    if (section_id < 1 || section_id > SECTIONS_COUNT) {
-        httpd_resp_set_status(req, "400 Bad Request");
-        JSON_RESP(req, "{\"error\":\"invalid section\"}");
-        return ESP_OK;
-    }
-
-    uint32_t duration = 0;
-    char body[128] = {0};
-    if (req->content_len > 0 && read_body(req, body, sizeof(body)) > 0) {
-        cJSON *j = cJSON_Parse(body);
-        if (j) {
-            cJSON *d = cJSON_GetObjectItem(j, "duration");
-            if (d) duration = (uint32_t)d->valuedouble;
-            cJSON_Delete(j);
-        }
-    }
-
-    valve_section_on((uint8_t)section_id, duration);
-    JSON_RESP(req, "{\"ok\":true}");
-    return ESP_OK;
-}
-
-static esp_err_t handle_section_off(httpd_req_t *req)
+static esp_err_t handle_section_post(httpd_req_t *req)
 {
     CHECK_AUTH(req);
 
     const char *uri = req->uri;
 
-    // Sprawdź /api/sections/all/off
+    // /api/sections/all/off
     if (strstr(uri, "/all/off")) {
         valve_all_off();
         JSON_RESP(req, "{\"ok\":true}");
         return ESP_OK;
     }
 
+    // Rozróżnij /on i /off po końcówce URI
+    bool is_on  = (strstr(uri, "/on")  != NULL);
+    bool is_off = (strstr(uri, "/off") != NULL);
+
+    if (!is_on && !is_off) {
+        httpd_resp_set_status(req, "404 Not Found");
+        JSON_RESP(req, "{\"error\":\"unknown action\"}");
+        return ESP_OK;
+    }
+
     int section_id = 0;
-    sscanf(uri, "/api/sections/%d/off", &section_id);
+    sscanf(uri, "/api/sections/%d/", &section_id);
     if (section_id < 1 || section_id > SECTIONS_COUNT) {
         httpd_resp_set_status(req, "400 Bad Request");
         JSON_RESP(req, "{\"error\":\"invalid section\"}");
         return ESP_OK;
     }
-    valve_section_off((uint8_t)section_id);
+
+    if (is_on) {
+        uint32_t duration = 0;
+        char body[128] = {0};
+        if (req->content_len > 0 && read_body(req, body, sizeof(body)) > 0) {
+            cJSON *j = cJSON_Parse(body);
+            if (j) {
+                cJSON *d = cJSON_GetObjectItem(j, "duration");
+                if (d) duration = (uint32_t)d->valuedouble;
+                cJSON_Delete(j);
+            }
+        }
+        valve_section_on((uint8_t)section_id, duration);
+    } else {
+        valve_section_off((uint8_t)section_id);
+    }
+
     JSON_RESP(req, "{\"ok\":true}");
     return ESP_OK;
 }
@@ -344,12 +342,13 @@ static esp_err_t handle_groups_put(httpd_req_t *req)
     return ESP_OK;
 }
 
-static esp_err_t handle_group_activate(httpd_req_t *req)
+// POST /api/groups/* — obsługuje /activate i zwykły POST (dispatch po URI)
+static esp_err_t handle_groups_post(httpd_req_t *req)
 {
     CHECK_AUTH(req);
 
     int id = 0;
-    sscanf(req->uri, "/api/groups/%d/activate", &id);
+    sscanf(req->uri, "/api/groups/%d", &id);
     if (id < 1 || id > GROUPS_MAX) {
         httpd_resp_set_status(req, "400 Bad Request");
         JSON_RESP(req, "{\"error\":\"invalid id\"}");
@@ -357,14 +356,14 @@ static esp_err_t handle_group_activate(httpd_req_t *req)
     }
 
     uint32_t duration = 0;
-    char body[64] = {0};
-    if (req->content_len > 0 && read_body(req, body, sizeof(body)) > 0) {
-        cJSON *j = cJSON_Parse(body);
-        if (j) {
-            cJSON *d = cJSON_GetObjectItem(j, "duration");
-            if (d) duration = (uint32_t)d->valuedouble;
-            cJSON_Delete(j);
-        }
+    char body[128] = {0};
+    if (req->content_len > 0) read_body(req, body, sizeof(body));
+
+    cJSON *j = cJSON_Parse(body);
+    if (j) {
+        cJSON *d = cJSON_GetObjectItem(j, "duration");
+        if (d) duration = (uint32_t)d->valuedouble;
+        cJSON_Delete(j);
     }
 
     groups_activate((uint8_t)id, duration);
@@ -552,15 +551,14 @@ esp_err_t rest_api_register(httpd_handle_t server)
     REG("/api/status",                 HTTP_GET,    handle_status);
 
     REG("/api/sections",               HTTP_GET,    handle_sections_get);
-    REG("/api/sections/*/on",          HTTP_POST,   handle_section_on);
-    REG("/api/sections/*/off",         HTTP_POST,   handle_section_off);
+    REG("/api/sections/*",             HTTP_POST,   handle_section_post);
 
     REG("/api/schedule",               HTTP_GET,    handle_schedule_get);
     REG("/api/schedule/*",             HTTP_PUT,    handle_schedule_put);
     REG("/api/schedule/*",             HTTP_DELETE, handle_schedule_delete);
 
     REG("/api/groups",                 HTTP_GET,    handle_groups_get);
-    REG("/api/groups/*/activate",      HTTP_POST,   handle_group_activate);
+    REG("/api/groups/*",               HTTP_POST,   handle_groups_post);
     REG("/api/groups/*",               HTTP_PUT,    handle_groups_put);
 
     REG("/api/settings",               HTTP_GET,    handle_settings_get);

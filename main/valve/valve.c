@@ -15,6 +15,9 @@ typedef struct {
 
 static section_state_t s_sections[SECTIONS_COUNT + 1]; // [0]=master (auto), [1-8]=sekcje
 static SemaphoreHandle_t s_mutex;
+static valve_state_cb_t  s_state_cb = NULL;
+
+void valve_set_state_callback(valve_state_cb_t cb) { s_state_cb = cb; }
 
 // Przelicz aktualny stan sekcji → bity 74HC595 i wyślij
 static void apply_state(void)
@@ -63,6 +66,7 @@ esp_err_t valve_section_on(uint8_t section, uint32_t duration_sec)
     apply_state();
     xSemaphoreGive(s_mutex);
     ESP_LOGI(TAG, "section %d ON (duration=%lus)", section, (unsigned long)duration_sec);
+    if (s_state_cb) s_state_cb();
     return ESP_OK;
 }
 
@@ -75,6 +79,7 @@ esp_err_t valve_section_off(uint8_t section)
     apply_state();
     xSemaphoreGive(s_mutex);
     ESP_LOGI(TAG, "section %d OFF", section);
+    if (s_state_cb) s_state_cb();
     return ESP_OK;
 }
 
@@ -91,6 +96,7 @@ esp_err_t valve_sections_on(uint8_t section_mask, uint32_t duration_sec)
     xSemaphoreGive(s_mutex);
     ESP_LOGI(TAG, "sections 0x%02X ON (duration=%lus)",
              section_mask, (unsigned long)duration_sec);
+    if (s_state_cb) s_state_cb();
     return ESP_OK;
 }
 
@@ -104,6 +110,7 @@ esp_err_t valve_all_off(void)
     apply_state();
     xSemaphoreGive(s_mutex);
     ESP_LOGI(TAG, "all sections OFF");
+    if (s_state_cb) s_state_cb();
     return ESP_OK;
 }
 
@@ -146,5 +153,6 @@ void valve_task(void *arg)
             apply_state();
         }
         xSemaphoreGive(s_mutex);
+        if (changed && s_state_cb) s_state_cb();
     }
 }

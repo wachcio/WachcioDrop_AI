@@ -1,5 +1,6 @@
 #include "wifi_manager.h"
 #include "captive_portal.h"
+#include "webserver/file_server.h"
 #include "storage/nvs_storage.h"
 #include "leds/leds.h"
 #include "config.h"
@@ -29,9 +30,7 @@ static void event_handler(void *arg, esp_event_base_t base,
                            int32_t event_id, void *data)
 {
     if (base == WIFI_EVENT) {
-        if (event_id == WIFI_EVENT_STA_START) {
-            esp_wifi_connect();
-        } else if (event_id == WIFI_EVENT_STA_DISCONNECTED) {
+        if (event_id == WIFI_EVENT_STA_DISCONNECTED) {
             s_retries++;
             leds_set_bit(BIT_LED_WIFI, false);
             if (s_retries < WIFI_MAX_RETRIES) {
@@ -51,16 +50,27 @@ static void event_handler(void *arg, esp_event_base_t base,
     }
 }
 
+static void start_ap(void)
+{
+    wifi_config_t ap_cfg = {0};
+    strncpy((char *)ap_cfg.ap.ssid,     DEFAULT_AP_SSID, sizeof(ap_cfg.ap.ssid) - 1);
+    strncpy((char *)ap_cfg.ap.password, DEFAULT_AP_PASS, sizeof(ap_cfg.ap.password) - 1);
+    ap_cfg.ap.ssid_len       = strlen(DEFAULT_AP_SSID);
+    ap_cfg.ap.channel        = 1;
+    ap_cfg.ap.authmode       = WIFI_AUTH_WPA2_PSK;
+    ap_cfg.ap.max_connection = 4;
+    esp_wifi_set_config(WIFI_IF_AP, &ap_cfg);
+    ESP_LOGI(TAG, "AP configured: SSID='%s' IP=%s", DEFAULT_AP_SSID, AP_IP_ADDR);
+}
+
 static void start_sta(const char *ssid, const char *pass)
 {
     wifi_config_t cfg = {0};
     strncpy((char *)cfg.sta.ssid,     ssid, sizeof(cfg.sta.ssid) - 1);
     strncpy((char *)cfg.sta.password, pass, sizeof(cfg.sta.password) - 1);
-    cfg.sta.threshold.authmode = WIFI_AUTH_WPA2_PSK;
-
-    esp_wifi_set_mode(WIFI_MODE_STA);
+    cfg.sta.threshold.authmode = WIFI_AUTH_WPA_PSK;  // minimum — akceptuje WPA2 i WPA3-SAE
     esp_wifi_set_config(WIFI_IF_STA, &cfg);
-    esp_wifi_start();
+    esp_wifi_connect();
     ESP_LOGI(TAG, "connecting to '%s'...", ssid);
 }
 
@@ -108,106 +118,83 @@ void wifi_manager_task(void *arg)
 {
     ESP_LOGI(TAG, "task started");
 
-    // Użyj globalnej konfiguracji
     app_config_t *cfg = &g_config;
 
-    bool has_creds = (cfg->wifi_ssid[0] != '\0');
+    // Zawsze uruchamiamy w trybie APSTA — AP działa przez cały czas
+    start_ap();
+    esp_wifi_set_mode(WIFI_MODE_APSTA);
+    esp_wifi_start();
+    ESP_LOGI(TAG, "AP started: SSID='%s' IP=%s", DEFAULT_AP_SSID, AP_IP_ADDR);
 
-    if (!has_creds || s_force_ap) {
-        goto start_ap;
+    // Portal startuje raz i działa przez cały czas pracy urządzenia
+    captive_portal_start(file_server_get_handle(), cfg);
+    s_state = WIFI_STATE_AP_MODE;
+
+    // Jeśli mamy zapisane poświadczenia — próbuj STA od razu
+    // Krótkie opóźnienie żeby WiFi stack zdążył uruchomić STA interface
+    if (cfg->wifi_ssid[0] != '\0') {
+        vTaskDelay(pdMS_TO_TICKS(200));
+        s_state   = WIFI_STATE_CONNECTING;
+        s_retries = 0;
+        xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT);
+        start_sta(cfg->wifi_ssid, cfg->wifi_pass);
     }
 
-    // Próba połączenia STA
-    s_state   = WIFI_STATE_CONNECTING;
-    s_retries = 0;
-    start_sta(cfg->wifi_ssid, cfg->wifi_pass);
-
-    {
-        EventBits_t bits = xEventGroupWaitBits(s_wifi_event_group,
-                                               WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
-                                               pdTRUE, pdFALSE,
-                                               pdMS_TO_TICKS(WIFI_CONNECT_TIMEOUT_MS));
-        if (bits & WIFI_CONNECTED_BIT) {
-            s_state = WIFI_STATE_CONNECTED;
-            ESP_LOGI(TAG, "STA connected");
-            // Monitoruj połączenie w pętli
-            while (1) {
-                vTaskDelay(pdMS_TO_TICKS(5000));
-                if (s_force_ap) {
-                    esp_wifi_stop();
-                    goto start_ap;
-                }
-                wifi_ap_record_t ap;
-                if (esp_wifi_sta_get_ap_info(&ap) != ESP_OK) {
-                    ESP_LOGW(TAG, "connection lost");
-                    s_state = WIFI_STATE_CONNECTING;
-                    leds_set_bit(BIT_LED_WIFI, false);
-                    s_retries = 0;
-                    xEventGroupClearBits(s_wifi_event_group,
-                                        WIFI_CONNECTED_BIT | WIFI_FAIL_BIT);
-                    esp_wifi_connect();
-                    EventBits_t rb = xEventGroupWaitBits(
-                        s_wifi_event_group,
-                        WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
-                        pdTRUE, pdFALSE,
-                        pdMS_TO_TICKS(WIFI_CONNECT_TIMEOUT_MS));
-                    if (rb & WIFI_CONNECTED_BIT) {
-                        s_state = WIFI_STATE_CONNECTED;
-                    } else {
-                        esp_wifi_stop();
-                        goto start_ap;
-                    }
-                }
+    while (1) {
+        // Migaj LED gdy brak połączenia STA, świeć ciągłe gdy połączone
+        if (s_state != WIFI_STATE_CONNECTED) {
+            leds_set_bit(BIT_LED_WIFI, true);
+            vTaskDelay(pdMS_TO_TICKS(500));
+            leds_set_bit(BIT_LED_WIFI, false);
+            vTaskDelay(pdMS_TO_TICKS(500));
+        } else {
+            vTaskDelay(pdMS_TO_TICKS(5000));
+            // Sprawdź czy STA nadal połączone
+            wifi_ap_record_t ap;
+            if (esp_wifi_sta_get_ap_info(&ap) != ESP_OK) {
+                ESP_LOGW(TAG, "STA connection lost, reconnecting...");
+                s_state = WIFI_STATE_CONNECTING;
+                s_retries = 0;
+                leds_set_bit(BIT_LED_WIFI, false);
+                xEventGroupClearBits(s_wifi_event_group,
+                                     WIFI_CONNECTED_BIT | WIFI_FAIL_BIT);
+                esp_wifi_connect();
             }
         }
-    }
 
-start_ap:
-    ESP_LOGI(TAG, "starting AP mode");
-    s_state   = WIFI_STATE_AP_MODE;
-    s_retries = 0;
-    esp_wifi_stop();
-
-    captive_portal_start(cfg);
-
-    leds_set_bit(BIT_LED_WIFI, false);
-    // Migaj LED WiFi w AP mode
-    while (1) {
-        leds_set_bit(BIT_LED_WIFI, true);
-        vTaskDelay(pdMS_TO_TICKS(500));
-        leds_set_bit(BIT_LED_WIFI, false);
-        vTaskDelay(pdMS_TO_TICKS(500));
-
-        if (s_force_ap) s_force_ap = false;
-
-        // Sprawdź czy portal zapisał konfigurację i mamy nowe poświadczenia
-        if (cfg->wifi_ssid[0] != '\0' &&
-            captive_portal_config_received()) {
-            ESP_LOGI(TAG, "new WiFi config received, reconnecting...");
-            captive_portal_stop();
-            esp_wifi_stop();
-            vTaskDelay(pdMS_TO_TICKS(500));
+        // Nowa konfiguracja z portalu — (re)połącz STA
+        if (cfg->wifi_ssid[0] != '\0' && captive_portal_config_received()) {
+            captive_portal_reset_flag();
+            ESP_LOGI(TAG, "new WiFi config, connecting STA to '%s'", cfg->wifi_ssid);
             s_state   = WIFI_STATE_CONNECTING;
             s_retries = 0;
+            leds_set_bit(BIT_LED_WIFI, false);
             xEventGroupClearBits(s_wifi_event_group,
                                  WIFI_CONNECTED_BIT | WIFI_FAIL_BIT);
+            // Rozłącz poprzednie połączenie STA jeśli było
+            esp_wifi_disconnect();
+            vTaskDelay(pdMS_TO_TICKS(200));
             start_sta(cfg->wifi_ssid, cfg->wifi_pass);
-            EventBits_t bits = xEventGroupWaitBits(
-                s_wifi_event_group,
-                WIFI_CONNECTED_BIT | WIFI_FAIL_BIT,
-                pdTRUE, pdFALSE,
-                pdMS_TO_TICKS(WIFI_CONNECT_TIMEOUT_MS));
+        }
+
+        // Sprawdź wyniki próby połączenia STA (nieblokująco)
+        if (s_state == WIFI_STATE_CONNECTING) {
+            EventBits_t bits = xEventGroupGetBits(s_wifi_event_group);
             if (bits & WIFI_CONNECTED_BIT) {
                 s_state = WIFI_STATE_CONNECTED;
-                ESP_LOGI(TAG, "connected after portal setup");
                 leds_set_bit(BIT_LED_WIFI, true);
-                // Monitoruj w pętli (uproszczona wersja)
-                while (1) vTaskDelay(pdMS_TO_TICKS(10000));
-            } else {
-                ESP_LOGE(TAG, "still can't connect, going back to AP");
-                esp_wifi_stop();
-                captive_portal_start(cfg);
+                ESP_LOGI(TAG, "STA connected: %s", s_ip);
+            } else if (bits & WIFI_FAIL_BIT) {
+                s_state = WIFI_STATE_AP_MODE;
+                ESP_LOGW(TAG, "STA connect failed, staying in AP mode");
+                xEventGroupClearBits(s_wifi_event_group, WIFI_FAIL_BIT);
             }
+        }
+
+        if (s_force_ap) {
+            s_force_ap = false;
+            esp_wifi_disconnect();
+            s_state = WIFI_STATE_AP_MODE;
         }
     }
 }

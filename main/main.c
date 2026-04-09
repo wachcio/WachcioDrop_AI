@@ -101,7 +101,14 @@ void app_main(void)
     }
 
     // ------------------------------------------------------------------
-    // 10. Uruchom taski FreeRTOS
+    // 10. Serwer HTTP — MUSI być przed taskami WiFi/captive portal
+    //     (wifi_manager_task woła file_server_get_handle() przy starcie)
+    // ------------------------------------------------------------------
+    file_server_init();
+    file_server_start();
+
+    // ------------------------------------------------------------------
+    // 11. Uruchom taski FreeRTOS
     // ------------------------------------------------------------------
 
     // Task zaworów - najwyższy priorytet (liczy timery sekcji)
@@ -116,17 +123,13 @@ void app_main(void)
     xTaskCreate(menu_task, "display",
                 TASK_STACK_DISPLAY, NULL, TASK_PRIO_DISPLAY, NULL);
 
-    // Task WiFi (state machine + captive portal)
+    // Task WiFi (state machine + captive portal) — po file_server_start!
     xTaskCreate(wifi_manager_task, "wifi",
                 TASK_STACK_WIFI, NULL, TASK_PRIO_WIFI, NULL);
 
     // Task NTP (synchronizacja po połączeniu WiFi)
     xTaskCreate(ntp_task, "ntp",
                 TASK_STACK_NTP, NULL, TASK_PRIO_NTP, NULL);
-
-    // Serwer WWW + REST API (uruchamia się natychmiast, SPIFFS dostępny offline)
-    file_server_init();
-    file_server_start();
 
     // Task MQTT
     mqtt_manager_init();

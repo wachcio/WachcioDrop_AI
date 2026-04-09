@@ -14,33 +14,38 @@
 
 static const char *TAG = "captive_portal";
 
-static httpd_handle_t s_server    = NULL;
 static bool           s_cfg_rcvd  = false;
 static app_config_t  *s_cfg       = NULL;
 static TaskHandle_t   s_dns_task  = NULL;
 
+
 // --------------------------------------------------------------------------
-// HTML strona konfiguracji
+// HTML strona konfiguracji (dynamiczna — wstawia token)
 // --------------------------------------------------------------------------
-static const char SETUP_HTML[] =
+static const char SETUP_HTML_FMT[] =
 "<!DOCTYPE html><html><head><meta charset='utf-8'>"
 "<meta name='viewport' content='width=device-width,initial-scale=1'>"
 "<title>Konfiguracja nawadniania</title>"
 "<style>body{font-family:sans-serif;max-width:500px;margin:20px auto;padding:0 15px}"
 "h2{color:#2a7c2a}label{display:block;margin-top:12px;font-weight:bold}"
-"input{width:100%;padding:8px;box-sizing:border-box;border:1px solid #ccc;border-radius:4px}"
+"input,textarea{width:100%%;padding:8px;box-sizing:border-box;border:1px solid #ccc;border-radius:4px}"
 "input[type=submit]{background:#2a7c2a;color:#fff;border:0;cursor:pointer;margin-top:20px}"
-"input[type=submit]:hover{background:#1f5e1f}</style></head>"
-"<body><h2>Konfiguracja sterownika</h2>"
+"input[type=submit]:hover{background:#1f5e1f}"
+".token{background:#f0f8f0;border:1px solid #2a7c2a;border-radius:6px;padding:10px;margin-bottom:16px}"
+".token b{color:#2a7c2a}.token code{word-break:break-all;font-size:0.9em}</style></head>"
+"<body><h2>Sterownik nawadniania</h2>"
+"<div class='token'><b>Token API:</b><br><code>%s</code>"
+"<br><small>Uzywaj w naglowku: <i>Authorization: Bearer &lt;token&gt;</i></small></div>"
 "<form method='POST' action='/setup'>"
-"<label>WiFi SSID</label><input name='ssid' required>"
-"<label>WiFi Haslo</label><input name='pass' type='password'>"
-"<label>MQTT URI (np. mqtt://192.168.1.10)</label><input name='mqtt_uri'>"
-"<label>MQTT Uzytkownik</label><input name='mqtt_user'>"
-"<label>MQTT Haslo</label><input name='mqtt_pass' type='password'>"
-"<label>PHP URL (daily check)</label><input name='php_url'>"
-"<label>Serwer NTP</label><input name='ntp_server' placeholder='pool.ntp.org'>"
-"<label>Strefa czasowa (offset UTC, np. 2)</label><input name='tz' type='number' min='-12' max='14'>"
+"<label>WiFi SSID</label><input name='ssid' value='%s' required>"
+"<label>WiFi Haslo</label><input name='pass' type='password' placeholder='(bez zmian)'>"
+"<label>MQTT URI (np. mqtt://192.168.1.10)</label><input name='mqtt_uri' value='%s'>"
+"<label>MQTT Uzytkownik</label><input name='mqtt_user' value='%s'>"
+"<label>MQTT Haslo</label><input name='mqtt_pass' type='password' placeholder='(bez zmian)'>"
+"<label>PHP URL (daily check)</label><input name='php_url' value='%s'>"
+"<label>Serwer NTP</label><input name='ntp_server' value='%s' placeholder='pool.ntp.org'>"
+"<label>Strefa czasowa (offset UTC, np. 2)</label>"
+"<input name='tz' type='number' min='-12' max='14' value='%d'>"
 "<input type='submit' value='Zapisz i polacz'>"
 "</form></body></html>";
 
@@ -92,8 +97,28 @@ static bool get_param(const char *body, const char *key, char *out, size_t max)
 // --------------------------------------------------------------------------
 static esp_err_t root_get_handler(httpd_req_t *req)
 {
+    const char *token  = (s_cfg && s_cfg->api_token[0])  ? s_cfg->api_token  : "(brak)";
+    const char *ssid   = (s_cfg && s_cfg->wifi_ssid[0])  ? s_cfg->wifi_ssid  : "";
+    const char *mqtt   = (s_cfg && s_cfg->mqtt_uri[0])   ? s_cfg->mqtt_uri   : "";
+    const char *muser  = (s_cfg && s_cfg->mqtt_user[0])  ? s_cfg->mqtt_user  : "";
+    const char *phpurl = (s_cfg && s_cfg->php_url[0])    ? s_cfg->php_url    : "";
+    const char *ntp    = (s_cfg && s_cfg->ntp_server[0]) ? s_cfg->ntp_server : "pool.ntp.org";
+    int         tz     = s_cfg ? s_cfg->timezone_offset : 0;
+
+    // sizeof(SETUP_HTML_FMT) = rozmiar szablonu + dane konfiguracyjne
+    size_t buflen = sizeof(SETUP_HTML_FMT) + strlen(token) + strlen(ssid)
+                  + strlen(mqtt) + strlen(muser) + strlen(phpurl) + strlen(ntp) + 32;
+    char *html = malloc(buflen);
+    if (!html) { httpd_resp_send_500(req); return ESP_OK; }
+
+    // Użyj (int) cast żeby uniknąć format-truncation — rozmiar jest obliczony dynamicznie
+    int written = snprintf(html, buflen, SETUP_HTML_FMT,
+                           token, ssid, mqtt, muser, phpurl, ntp, tz);
+    (void)written;
+
     httpd_resp_set_type(req, "text/html");
-    httpd_resp_send(req, SETUP_HTML, strlen(SETUP_HTML));
+    httpd_resp_send(req, html, strlen(html));
+    free(html);
     return ESP_OK;
 }
 
@@ -199,60 +224,40 @@ static void dns_server_task(void *arg)
 // --------------------------------------------------------------------------
 // API
 // --------------------------------------------------------------------------
-esp_err_t captive_portal_start(app_config_t *cfg)
+esp_err_t captive_portal_start(httpd_handle_t server, app_config_t *cfg)
 {
-    s_cfg     = cfg;
+    s_cfg      = cfg;
     s_cfg_rcvd = false;
 
-    // Skonfiguruj AP
-    wifi_config_t ap_cfg = {0};
-    strncpy((char *)ap_cfg.ap.ssid, DEFAULT_AP_SSID, sizeof(ap_cfg.ap.ssid) - 1);
-    strncpy((char *)ap_cfg.ap.password, DEFAULT_AP_PASS, sizeof(ap_cfg.ap.password) - 1);
-    ap_cfg.ap.ssid_len       = strlen(DEFAULT_AP_SSID);
-    ap_cfg.ap.channel        = 1;
-    ap_cfg.ap.authmode       = WIFI_AUTH_WPA2_PSK;
-    ap_cfg.ap.max_connection = 4;
-
-    esp_wifi_set_mode(WIFI_MODE_AP);
-    esp_wifi_set_config(WIFI_IF_AP, &ap_cfg);
-    esp_wifi_start();
-    ESP_LOGI(TAG, "AP started: SSID='%s' IP=%s", DEFAULT_AP_SSID, AP_IP_ADDR);
-
-    // Uruchom serwer DNS
-    xTaskCreate(dns_server_task, "dns", 4096, NULL, 3, &s_dns_task);
-
-    // Uruchom HTTP server
-    httpd_config_t hcfg = HTTPD_DEFAULT_CONFIG();
-    hcfg.uri_match_fn = httpd_uri_match_wildcard;
-
-    if (httpd_start(&s_server, &hcfg) != ESP_OK) {
-        ESP_LOGE(TAG, "httpd_start failed");
-        return ESP_FAIL;
+    // Uruchom serwer DNS (odpowiada na wszystko → 192.168.4.1)
+    if (!s_dns_task) {
+        xTaskCreate(dns_server_task, "dns", 4096, NULL, 3, &s_dns_task);
     }
+
+    // Rejestruj handlery w istniejącym httpd
+    // Wyrejestruj wildcard static handler jeśli jest (portal przejmuje /*)
+    httpd_unregister_uri_handler(server, "/*", HTTP_GET);
 
     httpd_uri_t root = { .uri = "/",      .method = HTTP_GET,  .handler = root_get_handler };
     httpd_uri_t post = { .uri = "/setup", .method = HTTP_POST, .handler = setup_post_handler };
     httpd_uri_t any  = { .uri = "/*",     .method = HTTP_GET,  .handler = catch_all_handler };
 
-    httpd_register_uri_handler(s_server, &root);
-    httpd_register_uri_handler(s_server, &post);
-    httpd_register_uri_handler(s_server, &any);
+    httpd_register_uri_handler(server, &root);
+    httpd_register_uri_handler(server, &post);
+    httpd_register_uri_handler(server, &any);
 
-    ESP_LOGI(TAG, "portal started");
+    ESP_LOGI(TAG, "portal started (token: %.8s...)", cfg->api_token);
     return ESP_OK;
 }
 
-esp_err_t captive_portal_stop(void)
+// Portal nigdy nie jest zamykany — AP działa przez cały czas
+// Funkcja zachowana dla kompatybilności, usuwa tylko handlery HTTP
+esp_err_t captive_portal_stop(httpd_handle_t server)
 {
-    if (s_server) {
-        httpd_stop(s_server);
-        s_server = NULL;
-    }
-    if (s_dns_task) {
-        vTaskDelete(s_dns_task);
-        s_dns_task = NULL;
-    }
-    ESP_LOGI(TAG, "portal stopped");
+    httpd_unregister_uri_handler(server, "/",      HTTP_GET);
+    httpd_unregister_uri_handler(server, "/setup", HTTP_POST);
+    httpd_unregister_uri_handler(server, "/*",     HTTP_GET);
+    ESP_LOGI(TAG, "portal handlers unregistered");
     return ESP_OK;
 }
 

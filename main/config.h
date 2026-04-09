@@ -52,9 +52,9 @@
 // =============================================================================
 // Application defaults
 // =============================================================================
-#define DEFAULT_NTP_SERVER      "pool.ntp.org"
-#define DEFAULT_AP_SSID         "IrrigationSetup"
-#define DEFAULT_AP_PASS         "irrigation123"
+#define DEFAULT_NTP_SERVER      "pl.pool.ntp.org"
+#define DEFAULT_AP_SSID         "WachcioDrop"
+#define DEFAULT_AP_PASS         "wachciodrop123"
 #define AP_IP_ADDR              "192.168.4.1"
 
 #define WIFI_CONNECT_TIMEOUT_MS (30 * 1000)

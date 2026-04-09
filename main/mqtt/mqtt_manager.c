@@ -26,10 +26,10 @@ static SemaphoreHandle_t        s_mutex;
 extern app_config_t g_config;
 extern bool         g_irrigation_today;
 
-#define MQTT_PREFIX     "irrigation"
+#define MQTT_PREFIX     "wachciodrop"
 #define MQTT_HA_PREFIX  "homeassistant"
-#define DEVICE_NAME     "IrrigationController"
-#define DEVICE_ID       "irrigation_esp32s3"
+#define DEVICE_NAME     "WachcioDrop"
+#define DEVICE_ID       "wachciodrop_esp32s3"
 
 // --------------------------------------------------------------------------
 // HA Autodiscovery helpers
@@ -297,9 +297,15 @@ static void mqtt_event_handler(void *arg, esp_event_base_t base,
 // Init & task
 // --------------------------------------------------------------------------
 
+static void on_valve_state_changed(void)
+{
+    mqtt_publish_all_states();
+}
+
 esp_err_t mqtt_manager_init(void)
 {
     s_mutex = xSemaphoreCreateMutex();
+    valve_set_state_callback(on_valve_state_changed);
     ESP_LOGI(TAG, "init OK");
     return ESP_OK;
 }
