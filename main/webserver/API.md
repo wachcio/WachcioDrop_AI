@@ -254,8 +254,9 @@ Odpowiedź:
 ---
 
 ### POST /api/time
-Ustaw czas RTC (unix timestamp UTC).
+Ustaw czas RTC — trzy warianty wywołania.
 
+**Wariant 1: unix timestamp (UTC)**
 ```bash
 curl -X POST \
   -H "Authorization: Bearer TOKEN" \
@@ -263,6 +264,31 @@ curl -X POST \
   -d '{"unix": 1750000200}' \
   http://192.168.20.230/api/time
 ```
+
+**Wariant 2: datetime string (czas lokalny)**
+```bash
+curl -X POST \
+  -H "Authorization: Bearer TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"datetime": "2025-06-15T10:30:00"}' \
+  http://192.168.20.230/api/time
+```
+
+**Wariant 3: pola osobno (czas lokalny)**
+```bash
+curl -X POST \
+  -H "Authorization: Bearer TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"year":2025,"month":6,"day":15,"hour":10,"minute":30,"second":0}' \
+  http://192.168.20.230/api/time
+```
+
+Odpowiedź (potwierdzenie ustawionego czasu):
+```json
+{"ok": true, "time": "2025-06-15T10:30:00", "unix": 1750000200}
+```
+
+> Czas lokalny uwzględnia polską strefę czasową z automatycznym DST (CET/CEST).
 
 ---
 

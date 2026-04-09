@@ -112,6 +112,19 @@ time_t rtc_get_unix(void)
     return mktime(&t);
 }
 
+esp_err_t rtc_sync_system_clock(void)
+{
+    if (!s_available) return ESP_ERR_INVALID_STATE;
+    struct tm t = {0};
+    esp_err_t err = ds3231_get_time(&s_dev, &t);
+    if (err == ESP_OK) {
+        struct timeval tv = { .tv_sec = utc_mktime(&t), .tv_usec = 0 };
+        settimeofday(&tv, NULL);
+        ESP_LOGD(TAG, "system clock synced from DS3231");
+    }
+    return err;
+}
+
 esp_err_t rtc_get_temperature(int16_t *temp_hundredths)
 {
     if (!s_available) return ESP_ERR_INVALID_STATE;

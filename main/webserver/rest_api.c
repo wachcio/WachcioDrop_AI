@@ -461,11 +461,19 @@ static esp_err_t handle_time_get(httpd_req_t *req)
     return ESP_OK;
 }
 
+// --------------------------------------------------------------------------
+// POST /api/time
+// Akceptuje:
+//   {"unix": 1750000200}                  — unix timestamp UTC
+//   {"datetime": "2025-06-15T10:30:00"}   — czas lokalny (strefa z TZ)
+//   {"year":2025,"month":6,"day":15,
+//    "hour":10,"minute":30,"second":0}    — pola osobno (czas lokalny)
+// --------------------------------------------------------------------------
 static esp_err_t handle_time_post(httpd_req_t *req)
 {
     CHECK_AUTH(req);
 
-    char body[64] = {0};
+    char body[128] = {0};
     if (read_body(req, body, sizeof(body)) <= 0) {
         httpd_resp_set_status(req, "400 Bad Request");
         JSON_RESP(req, "{\"error\":\"no body\"}");
@@ -477,12 +485,73 @@ static esp_err_t handle_time_post(httpd_req_t *req)
         JSON_RESP(req, "{\"error\":\"invalid JSON\"}");
         return ESP_OK;
     }
-    cJSON *v = cJSON_GetObjectItem(j, "unix");
-    if (v) {
-        rtc_set_time_unix((time_t)(long long)v->valuedouble);
+
+    time_t t = 0;
+    cJSON *v;
+
+    if ((v = cJSON_GetObjectItem(j, "unix")) != NULL) {
+        t = (time_t)(long long)v->valuedouble;
+
+    } else if ((v = cJSON_GetObjectItem(j, "datetime")) != NULL && v->valuestring) {
+        struct tm tm = {0};
+        if (strptime(v->valuestring, "%Y-%m-%dT%H:%M:%S", &tm) == NULL) {
+            cJSON_Delete(j);
+            httpd_resp_set_status(req, "400 Bad Request");
+            JSON_RESP(req, "{\"error\":\"invalid datetime format, expected YYYY-MM-DDTHH:MM:SS\"}");
+            return ESP_OK;
+        }
+        tm.tm_isdst = -1;
+        t = mktime(&tm);
+
+    } else {
+        cJSON *yr = cJSON_GetObjectItem(j, "year");
+        cJSON *mo = cJSON_GetObjectItem(j, "month");
+        cJSON *dy = cJSON_GetObjectItem(j, "day");
+        cJSON *hr = cJSON_GetObjectItem(j, "hour");
+        cJSON *mn = cJSON_GetObjectItem(j, "minute");
+        cJSON *sc = cJSON_GetObjectItem(j, "second");
+
+        if (!yr || !mo || !dy || !hr || !mn) {
+            cJSON_Delete(j);
+            httpd_resp_set_status(req, "400 Bad Request");
+            JSON_RESP(req, "{\"error\":\"provide unix, datetime, or year/month/day/hour/minute\"}");
+            return ESP_OK;
+        }
+
+        struct tm tm = {0};
+        tm.tm_year  = (int)yr->valuedouble - 1900;
+        tm.tm_mon   = (int)mo->valuedouble - 1;
+        tm.tm_mday  = (int)dy->valuedouble;
+        tm.tm_hour  = (int)hr->valuedouble;
+        tm.tm_min   = (int)mn->valuedouble;
+        tm.tm_sec   = sc ? (int)sc->valuedouble : 0;
+        tm.tm_isdst = -1;
+        t = mktime(&tm);
     }
+
     cJSON_Delete(j);
-    JSON_RESP(req, "{\"ok\":true}");
+
+    if (t <= 0) {
+        httpd_resp_set_status(req, "400 Bad Request");
+        JSON_RESP(req, "{\"error\":\"time conversion failed\"}");
+        return ESP_OK;
+    }
+
+    rtc_set_time_unix(t);
+
+    struct tm t_local;
+    localtime_r(&t, &t_local);
+    char tstr[32];
+    strftime(tstr, sizeof(tstr), "%Y-%m-%dT%H:%M:%S", &t_local);
+
+    cJSON *resp = cJSON_CreateObject();
+    cJSON_AddBoolToObject(resp,   "ok",   true);
+    cJSON_AddStringToObject(resp, "time", tstr);
+    cJSON_AddNumberToObject(resp, "unix", (double)t);
+    char *s = cJSON_PrintUnformatted(resp);
+    JSON_RESP(req, s);
+    free(s);
+    cJSON_Delete(resp);
     return ESP_OK;
 }
 

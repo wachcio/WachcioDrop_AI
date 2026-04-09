@@ -22,3 +22,7 @@ time_t rtc_get_unix(void);
 
 // Pobierz temperaturę z DS3231 (°C * 100)
 esp_err_t rtc_get_temperature(int16_t *temp_hundredths);
+
+// Odczytaj czas z DS3231 i zaktualizuj zegar systemowy (settimeofday)
+// Wywołuj cyklicznie aby eliminować dryft zegara wewnętrznego ESP32
+esp_err_t rtc_sync_system_clock(void);
