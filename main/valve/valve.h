@@ -28,6 +28,9 @@ uint8_t valve_get_active_mask(void);
 // Sprawdź czy dana sekcja jest aktywna
 bool valve_is_section_active(uint8_t section);
 
+// Pobierz pozostały czas sekcji w sekundach (0 = bezterminowo lub nieaktywna)
+uint32_t valve_get_remaining_sec(uint8_t section);
+
 // Opcjonalny callback wywoływany przy każdej zmianie stanu sekcji
 // Rejestrowany przez mqtt_manager, aby nie tworzyć zależności valve → mqtt
 typedef void (*valve_state_cb_t)(void);

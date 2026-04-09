@@ -112,13 +112,25 @@ static void draw_manual(void)
     uint8_t mask = valve_get_active_mask();
     for (int i = 0; i < SECTIONS_COUNT && i < 6; i++) {
         char buf[18];
-        snprintf(buf, sizeof(buf), "%sSekcja %d: %s",
-                 (i == s_cursor) ? ">" : " ",
-                 i + 1,
-                 (mask & (1 << i)) ? "ON " : "OFF");
+        uint32_t rem = valve_get_remaining_sec(i + 1);
+        if (mask & (1 << i)) {
+            if (rem > 0) {
+                snprintf(buf, sizeof(buf), "%sS%d: %02lu:%02lu",
+                         (i == s_cursor) ? ">" : " ",
+                         i + 1,
+                         (unsigned long)(rem / 60),
+                         (unsigned long)(rem % 60));
+            } else {
+                snprintf(buf, sizeof(buf), "%sSekcja %d: ON ",
+                         (i == s_cursor) ? ">" : " ", i + 1);
+            }
+        } else {
+            snprintf(buf, sizeof(buf), "%sSekcja %d: OFF",
+                     (i == s_cursor) ? ">" : " ", i + 1);
+        }
         display_text_full(i + 1, buf, i == s_cursor);
     }
-    display_text_full(7, "SW=tog LNG=wyjdz", false);
+    display_text_full(7, "SW=30min LNG=wyjdz", false);
 }
 
 static void draw_info(void)
@@ -212,7 +224,7 @@ void menu_handle_event(encoder_event_t evt)
             if (valve_is_section_active(sec)) {
                 valve_section_off(sec);
             } else {
-                valve_section_on(sec, 0); // bezterminowo
+                valve_section_on(sec, 30 * 60); // 30 minut domyślnie
             }
         } else if (evt == ENCODER_EVENT_LONG) {
             s_screen = MENU_SCREEN_HOME;

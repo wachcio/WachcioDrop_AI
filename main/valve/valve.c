@@ -131,6 +131,12 @@ bool valve_is_section_active(uint8_t section)
     return s_sections[section].active;
 }
 
+uint32_t valve_get_remaining_sec(uint8_t section)
+{
+    if (section < 1 || section > SECTIONS_COUNT) return 0;
+    return s_sections[section].remaining_sec;
+}
+
 // Task tick co 1 sekundę - odlicza czasy trwania sekcji
 void valve_task(void *arg)
 {

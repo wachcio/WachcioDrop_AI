@@ -2,7 +2,6 @@
 #include "groups/groups.h"
 #include "valve/valve.h"
 #include "storage/nvs_storage.h"
-#include "rtc/rtc.h"
 #include "config.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -107,12 +106,15 @@ void scheduler_task(void *arg)
 
     int last_minute = -1;
     while (1) {
+        // Użyj zegara systemowego z lokalną strefą czasową (zsync z DS3231/NTP przy starcie)
+        // DS3231 przechowuje UTC — rtc_get_time() zwraca UTC, więc nie używaj go tutaj
+        time_t now_t = time(NULL);
         struct tm now = {0};
-        if (rtc_get_time(&now) == ESP_OK) {
-            if (now.tm_min != last_minute) {
-                last_minute = now.tm_min;
-                check_and_fire(&now);
-            }
+        localtime_r(&now_t, &now);
+
+        if (now.tm_min != last_minute) {
+            last_minute = now.tm_min;
+            check_and_fire(&now);
         }
         vTaskDelay(pdMS_TO_TICKS(10000)); // sprawdzaj co 10s
     }
