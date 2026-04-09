@@ -44,6 +44,17 @@ void display_text(int col, int row, const char *text, bool invert)
     ssd1306_display_text(&s_dev, row, (char *)text, strlen(text), invert);
 }
 
+void display_text_full(int row, const char *text, bool invert)
+{
+    char buf[DISPLAY_COLS + 1];
+    int len = (int)strlen(text);
+    if (len > DISPLAY_COLS) len = DISPLAY_COLS;
+    memcpy(buf, text, len);
+    memset(buf + len, ' ', DISPLAY_COLS - len);
+    buf[DISPLAY_COLS] = '\0';
+    ssd1306_display_text(&s_dev, row, buf, DISPLAY_COLS, invert);
+}
+
 void display_rect(int x, int y, int w, int h)
 {
     // Biblioteka nopnop2002 używa stron (pages) - prostokąt rysujemy znakami

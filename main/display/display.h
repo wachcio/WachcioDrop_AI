@@ -14,6 +14,10 @@ void display_update(void);  // wypchnij bufor na ekran
 // Tekst (font 8x8 wbudowany w bibliotekę)
 void display_text(int col, int row, const char *text, bool invert);
 
+// Jak display_text ale zawsze wypełnia całą linię (16 znaków) spacjami
+// Użyj zamiast display_clear()+display_text() żeby uniknąć migania
+void display_text_full(int row, const char *text, bool invert);
+
 // Prostokąt (obramowanie)
 void display_rect(int x, int y, int w, int h);
 
