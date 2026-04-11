@@ -87,6 +87,6 @@
 #define TASK_STACK_LEDS         2048
 #define TASK_STACK_WIFI         4096
 #define TASK_STACK_NTP          3072
-#define TASK_STACK_MQTT         4096
+#define TASK_STACK_MQTT         6144
 #define TASK_STACK_WEBSERVER    8192
 #define TASK_STACK_DAILY_CHECK  4096
