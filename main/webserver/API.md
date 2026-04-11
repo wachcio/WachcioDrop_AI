@@ -363,6 +363,63 @@ curl -X POST \
 
 ---
 
+### GET /api/settings/export
+Pobierz pełny backup urządzenia jako JSON: konfiguracja (wraz z hasłami), harmonogram (16 wpisów), grupy (10 grup).
+
+```bash
+curl -H "Authorization: Bearer TOKEN" \
+  http://192.168.20.230/api/settings/export \
+  -o backup.json
+```
+
+Odpowiedź:
+```json
+{
+  "config": {
+    "wifi_ssid": "MojaSiec",
+    "wifi_pass": "haslo123",
+    "mqtt_uri": "mqtt://192.168.20.10",
+    "mqtt_user": "user",
+    "mqtt_pass": "mqttpass",
+    "php_url": "http://example.com/check.php",
+    "ntp_server": "pl.pool.ntp.org",
+    "api_token": "mojtoken",
+    "tz_offset": 1
+  },
+  "schedule": [
+    {"id": 0, "enabled": true, "days_mask": 127, "hour": 6, "minute": 30,
+     "duration_sec": 600, "section_mask": 3, "group_mask": 0},
+    ...
+  ],
+  "groups": [
+    {"id": 1, "name": "Trawnik", "section_mask": 7},
+    ...
+  ]
+}
+```
+
+---
+
+### PUT /api/settings/import
+Wgraj backup. Przywraca konfigurację, harmonogram i grupy. Hasła i token są opcjonalne — jeśli nie podane w JSON, pozostają bez zmian. Maksymalny rozmiar pliku: 8192 B.
+
+```bash
+curl -X PUT \
+  -H "Authorization: Bearer TOKEN" \
+  -H "Content-Type: application/json" \
+  -d @backup.json \
+  http://192.168.20.230/api/settings/import
+```
+
+Odpowiedź:
+```json
+{"ok": true}
+```
+
+> **Uwaga:** Po imporcie nowego tokenu lub WiFi należy zrestartować urządzenie, aby zmiany weszły w życie.
+
+---
+
 ## OTA Update
 
 ### POST /api/ota

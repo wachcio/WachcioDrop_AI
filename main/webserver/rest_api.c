@@ -594,6 +594,170 @@ static esp_err_t handle_time_sntp(httpd_req_t *req)
 }
 
 // --------------------------------------------------------------------------
+// GET /api/settings/export
+// Zwraca pełny backup urządzenia: config (z hasłami), harmonogram, grupy.
+// --------------------------------------------------------------------------
+static esp_err_t handle_settings_export(httpd_req_t *req)
+{
+    CHECK_AUTH(req);
+
+    cJSON *root = cJSON_CreateObject();
+
+    // --- config ---
+    cJSON *cfg = cJSON_AddObjectToObject(root, "config");
+    cJSON_AddStringToObject(cfg, "wifi_ssid",   g_config.wifi_ssid);
+    cJSON_AddStringToObject(cfg, "wifi_pass",   g_config.wifi_pass);
+    cJSON_AddStringToObject(cfg, "mqtt_uri",    g_config.mqtt_uri);
+    cJSON_AddStringToObject(cfg, "mqtt_user",   g_config.mqtt_user);
+    cJSON_AddStringToObject(cfg, "mqtt_pass",   g_config.mqtt_pass);
+    cJSON_AddStringToObject(cfg, "php_url",     g_config.php_url);
+    cJSON_AddStringToObject(cfg, "ntp_server",  g_config.ntp_server);
+    cJSON_AddStringToObject(cfg, "api_token",   g_config.api_token);
+    cJSON_AddNumberToObject(cfg, "tz_offset",   g_config.timezone_offset);
+
+    // --- schedule ---
+    const schedule_entry_t *entries = schedule_get_all();
+    cJSON *sched = cJSON_AddArrayToObject(root, "schedule");
+    for (int i = 0; i < SCHEDULE_ENTRIES; i++) {
+        cJSON *e = cJSON_CreateObject();
+        cJSON_AddNumberToObject(e, "id",           entries[i].id);
+        cJSON_AddBoolToObject(e,   "enabled",      entries[i].enabled);
+        cJSON_AddNumberToObject(e, "days_mask",    entries[i].days_mask);
+        cJSON_AddNumberToObject(e, "hour",         entries[i].hour);
+        cJSON_AddNumberToObject(e, "minute",       entries[i].minute);
+        cJSON_AddNumberToObject(e, "duration_sec", entries[i].duration_sec);
+        cJSON_AddNumberToObject(e, "section_mask", entries[i].section_mask);
+        cJSON_AddNumberToObject(e, "group_mask",   entries[i].group_mask);
+        cJSON_AddItemToArray(sched, e);
+    }
+
+    // --- groups ---
+    const irrigation_group_t *grps = groups_get_all();
+    cJSON *groups = cJSON_AddArrayToObject(root, "groups");
+    for (int i = 0; i < GROUPS_MAX; i++) {
+        cJSON *g = cJSON_CreateObject();
+        cJSON_AddNumberToObject(g, "id",           grps[i].id);
+        cJSON_AddStringToObject(g, "name",         grps[i].name);
+        cJSON_AddNumberToObject(g, "section_mask", grps[i].section_mask);
+        cJSON_AddItemToArray(groups, g);
+    }
+
+    char *s = cJSON_PrintUnformatted(root);
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    httpd_resp_set_hdr(req, "Content-Disposition", "attachment; filename=\"wachciodrop_backup.json\"");
+    httpd_resp_send(req, s, strlen(s));
+    free(s);
+    cJSON_Delete(root);
+    return ESP_OK;
+}
+
+// --------------------------------------------------------------------------
+// PUT /api/settings/import
+// Przywraca backup: config, harmonogram, grupy.
+// Hasła i token są opcjonalne — jeśli nie podane, zostają bez zmian.
+// --------------------------------------------------------------------------
+static esp_err_t handle_settings_import(httpd_req_t *req)
+{
+    CHECK_AUTH(req);
+
+    if (req->content_len == 0 || req->content_len > 8192) {
+        httpd_resp_set_status(req, "400 Bad Request");
+        JSON_RESP(req, "{\"error\":\"invalid content length\"}");
+        return ESP_OK;
+    }
+
+    char *body = malloc(req->content_len + 1);
+    if (!body) {
+        httpd_resp_set_status(req, "500 Internal Server Error");
+        JSON_RESP(req, "{\"error\":\"out of memory\"}");
+        return ESP_OK;
+    }
+    if (read_body(req, body, req->content_len + 1) <= 0) {
+        free(body);
+        httpd_resp_set_status(req, "400 Bad Request");
+        JSON_RESP(req, "{\"error\":\"read error\"}");
+        return ESP_OK;
+    }
+
+    cJSON *root = cJSON_Parse(body);
+    free(body);
+    if (!root) {
+        httpd_resp_set_status(req, "400 Bad Request");
+        JSON_RESP(req, "{\"error\":\"invalid JSON\"}");
+        return ESP_OK;
+    }
+
+    // --- config ---
+    cJSON *cfg = cJSON_GetObjectItem(root, "config");
+    if (cfg) {
+        cJSON *v;
+        #define COPY_STR(key, field) \
+            if ((v = cJSON_GetObjectItem(cfg, key)) && v->valuestring) \
+                strncpy(g_config.field, v->valuestring, sizeof(g_config.field) - 1)
+        COPY_STR("wifi_ssid",  wifi_ssid);
+        COPY_STR("wifi_pass",  wifi_pass);
+        COPY_STR("mqtt_uri",   mqtt_uri);
+        COPY_STR("mqtt_user",  mqtt_user);
+        COPY_STR("mqtt_pass",  mqtt_pass);
+        COPY_STR("php_url",    php_url);
+        COPY_STR("ntp_server", ntp_server);
+        COPY_STR("api_token",  api_token);
+        #undef COPY_STR
+        if ((v = cJSON_GetObjectItem(cfg, "tz_offset")))
+            g_config.timezone_offset = (int8_t)v->valuedouble;
+        storage_save_config(&g_config);
+    }
+
+    // --- schedule ---
+    cJSON *sched = cJSON_GetObjectItem(root, "schedule");
+    if (cJSON_IsArray(sched)) {
+        cJSON *e;
+        cJSON_ArrayForEach(e, sched) {
+            cJSON *id_j = cJSON_GetObjectItem(e, "id");
+            if (!id_j) continue;
+            int id = (int)id_j->valuedouble;
+            if (id < 0 || id >= SCHEDULE_ENTRIES) continue;
+            schedule_entry_t entry = {0};
+            entry.id = (uint8_t)id;
+            cJSON *v;
+            if ((v = cJSON_GetObjectItem(e, "enabled")))      entry.enabled      = cJSON_IsTrue(v);
+            if ((v = cJSON_GetObjectItem(e, "days_mask")))    entry.days_mask    = (uint8_t)v->valuedouble;
+            if ((v = cJSON_GetObjectItem(e, "hour")))         entry.hour         = (uint8_t)v->valuedouble;
+            if ((v = cJSON_GetObjectItem(e, "minute")))       entry.minute       = (uint8_t)v->valuedouble;
+            if ((v = cJSON_GetObjectItem(e, "duration_sec"))) entry.duration_sec = (uint16_t)v->valuedouble;
+            if ((v = cJSON_GetObjectItem(e, "section_mask"))) entry.section_mask = (uint8_t)v->valuedouble;
+            if ((v = cJSON_GetObjectItem(e, "group_mask")))   entry.group_mask   = (uint16_t)v->valuedouble;
+            schedule_set(&entry);
+        }
+    }
+
+    // --- groups ---
+    cJSON *groups = cJSON_GetObjectItem(root, "groups");
+    if (cJSON_IsArray(groups)) {
+        cJSON *g;
+        cJSON_ArrayForEach(g, groups) {
+            cJSON *id_j = cJSON_GetObjectItem(g, "id");
+            if (!id_j) continue;
+            int id = (int)id_j->valuedouble;
+            if (id < 1 || id > GROUPS_MAX) continue;
+            irrigation_group_t group = {0};
+            group.id = (uint8_t)id;
+            cJSON *v;
+            if ((v = cJSON_GetObjectItem(g, "name")) && v->valuestring)
+                strncpy(group.name, v->valuestring, sizeof(group.name) - 1);
+            if ((v = cJSON_GetObjectItem(g, "section_mask")))
+                group.section_mask = (uint8_t)v->valuedouble;
+            groups_set(&group);
+        }
+    }
+
+    cJSON_Delete(root);
+    JSON_RESP(req, "{\"ok\":true}");
+    return ESP_OK;
+}
+
+// --------------------------------------------------------------------------
 // POST /api/ota
 // --------------------------------------------------------------------------
 static esp_err_t handle_ota(httpd_req_t *req)
@@ -670,6 +834,8 @@ esp_err_t rest_api_register(httpd_handle_t server)
     REG("/api/groups/*",               HTTP_POST,   handle_groups_post);
     REG("/api/groups/*",               HTTP_PUT,    handle_groups_put);
 
+    REG("/api/settings/export",         HTTP_GET,    handle_settings_export);
+    REG("/api/settings/import",        HTTP_PUT,    handle_settings_import);
     REG("/api/settings",               HTTP_GET,    handle_settings_get);
     REG("/api/settings",               HTTP_POST,   handle_settings_post);
 
