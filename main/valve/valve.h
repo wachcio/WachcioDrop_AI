@@ -1,6 +1,7 @@
 #pragma once
 #include <stdint.h>
 #include <stdbool.h>
+#include <time.h>
 #include "esp_err.h"
 
 // Sterowanie sekcjami nawadniania przez 74HC595.
@@ -30,6 +31,9 @@ bool valve_is_section_active(uint8_t section);
 
 // Pobierz pozostały czas sekcji w sekundach (0 = bezterminowo lub nieaktywna)
 uint32_t valve_get_remaining_sec(uint8_t section);
+
+// Pobierz czas startu sekcji (unix timestamp, 0 = nieaktywna)
+time_t valve_get_started_at(uint8_t section);
 
 // Opcjonalny callback wywoływany przy każdej zmianie stanu sekcji
 // Rejestrowany przez mqtt_manager, aby nie tworzyć zależności valve → mqtt

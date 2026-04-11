@@ -84,24 +84,121 @@ static esp_err_t handle_status(httpd_req_t *req)
     char ip[16] = "0.0.0.0";
     wifi_get_ip(ip, sizeof(ip));
 
-    uint8_t mask = valve_get_active_mask();
-    cJSON *root = cJSON_CreateObject();
-    cJSON_AddNumberToObject(root, "uptime_sec",
-                            (double)(esp_timer_get_time() / 1000000));
-    cJSON_AddStringToObject(root, "ip", ip);
-    cJSON_AddNumberToObject(root, "rssi",    wifi_get_rssi());
-    cJSON_AddNumberToObject(root, "sections_active", __builtin_popcount(mask));
-    cJSON_AddBoolToObject(root,   "master_active",
-                          (bool)(leds_get() & BIT_MASTER));
-    cJSON_AddBoolToObject(root,   "irrigation_today", g_irrigation_today);
-
-    // Pobierz czas systemowy (Unix timestamp, już uwzględnia DST po setenv TZ)
     time_t now = time(NULL);
     struct tm t_local;
     localtime_r(&now, &t_local);
     char tstr[32];
     strftime(tstr, sizeof(tstr), "%Y-%m-%dT%H:%M:%S", &t_local);
-    cJSON_AddStringToObject(root, "time", tstr);
+
+    uint8_t mask = valve_get_active_mask();
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddNumberToObject(root, "uptime_sec",
+                            (double)(esp_timer_get_time() / 1000000));
+    cJSON_AddStringToObject(root, "ip",             ip);
+    cJSON_AddNumberToObject(root, "rssi",           wifi_get_rssi());
+    cJSON_AddNumberToObject(root, "sections_active", __builtin_popcount(mask));
+    cJSON_AddBoolToObject(root,   "master_active",  (bool)(leds_get() & BIT_MASTER));
+    cJSON_AddBoolToObject(root,   "irrigation_today", g_irrigation_today);
+    cJSON_AddStringToObject(root, "time",           tstr);
+
+    // Wszystkie sekcje
+    cJSON *sections_arr = cJSON_AddArrayToObject(root, "sections");
+    for (int i = 1; i <= SECTIONS_COUNT; i++) {
+        bool     active  = valve_is_section_active(i);
+        uint32_t rem     = valve_get_remaining_sec(i);
+        time_t   started = valve_get_started_at(i);
+
+        cJSON *s = cJSON_CreateObject();
+        cJSON_AddNumberToObject(s, "id",     i);
+        cJSON_AddBoolToObject(s,   "active", active);
+
+        if (active && started > 0) {
+            struct tm st_tm;
+            localtime_r(&started, &st_tm);
+            char st_str[32];
+            strftime(st_str, sizeof(st_str), "%Y-%m-%dT%H:%M:%S", &st_tm);
+            cJSON_AddStringToObject(s, "started_at", st_str);
+        } else {
+            cJSON_AddNullToObject(s, "started_at");
+        }
+
+        if (active && rem > 0) {
+            time_t ends_ts = now + (time_t)rem;
+            struct tm ends_tm;
+            localtime_r(&ends_ts, &ends_tm);
+            char ends_str[32];
+            strftime(ends_str, sizeof(ends_str), "%Y-%m-%dT%H:%M:%S", &ends_tm);
+            cJSON_AddStringToObject(s, "ends_at",       ends_str);
+            cJSON_AddNumberToObject(s, "remaining_sec", (double)rem);
+        } else if (active && rem == 0) {
+            cJSON_AddNullToObject(s, "ends_at");
+            cJSON_AddNullToObject(s, "remaining_sec");
+        } else {
+            cJSON_AddNullToObject(s, "ends_at");
+            cJSON_AddNullToObject(s, "remaining_sec");
+        }
+
+        cJSON_AddItemToArray(sections_arr, s);
+    }
+
+    // Wszystkie grupy
+    const irrigation_group_t *grps = groups_get_all();
+    cJSON *groups_arr = cJSON_AddArrayToObject(root, "groups");
+    for (int i = 0; i < GROUPS_MAX; i++) {
+        bool grp_active = (grps[i].section_mask != 0) &&
+                          ((mask & grps[i].section_mask) != 0);
+
+        cJSON *g = cJSON_CreateObject();
+        cJSON_AddNumberToObject(g, "id",           grps[i].id);
+        cJSON_AddStringToObject(g, "name",         grps[i].name);
+        cJSON_AddNumberToObject(g, "section_mask", grps[i].section_mask);
+        cJSON_AddBoolToObject(g,   "active",       grp_active);
+
+        if (grp_active) {
+            // started_at = najwcześniejszy czas startu aktywnych sekcji grupy
+            time_t earliest_start = 0;
+            uint32_t min_rem = UINT32_MAX;
+            bool any_indefinite = false;
+            for (int b = 0; b < SECTIONS_COUNT; b++) {
+                if (!(grps[i].section_mask & (1 << b))) continue;
+                if (!valve_is_section_active(b + 1)) continue;
+                time_t st = valve_get_started_at(b + 1);
+                if (earliest_start == 0 || st < earliest_start) earliest_start = st;
+                uint32_t r = valve_get_remaining_sec(b + 1);
+                if (r == 0) { any_indefinite = true; }
+                else if (r < min_rem) min_rem = r;
+            }
+
+            if (earliest_start > 0) {
+                struct tm st_tm;
+                localtime_r(&earliest_start, &st_tm);
+                char st_str[32];
+                strftime(st_str, sizeof(st_str), "%Y-%m-%dT%H:%M:%S", &st_tm);
+                cJSON_AddStringToObject(g, "started_at", st_str);
+            } else {
+                cJSON_AddNullToObject(g, "started_at");
+            }
+
+            if (any_indefinite || min_rem == UINT32_MAX) {
+                cJSON_AddNullToObject(g, "ends_at");
+                cJSON_AddNullToObject(g, "remaining_sec");
+            } else {
+                time_t ends_ts = now + (time_t)min_rem;
+                struct tm ends_tm;
+                localtime_r(&ends_ts, &ends_tm);
+                char ends_str[32];
+                strftime(ends_str, sizeof(ends_str), "%Y-%m-%dT%H:%M:%S", &ends_tm);
+                cJSON_AddStringToObject(g, "ends_at",       ends_str);
+                cJSON_AddNumberToObject(g, "remaining_sec", (double)min_rem);
+            }
+        } else {
+            cJSON_AddNullToObject(g, "started_at");
+            cJSON_AddNullToObject(g, "ends_at");
+            cJSON_AddNullToObject(g, "remaining_sec");
+        }
+
+        cJSON_AddItemToArray(groups_arr, g);
+    }
 
     char *s = cJSON_PrintUnformatted(root);
     JSON_RESP(req, s);

@@ -5,12 +5,14 @@
 #include "freertos/task.h"
 #include "freertos/semphr.h"
 #include "esp_log.h"
+#include <time.h>
 
 static const char *TAG = "valve";
 
 typedef struct {
     bool     active;
     uint32_t remaining_sec;  // 0 = bezterminowo
+    time_t   started_at;     // czas startu (unix), 0 = nieaktywna
 } section_state_t;
 
 static section_state_t s_sections[SECTIONS_COUNT + 1]; // [0]=master (auto), [1-8]=sekcje
@@ -51,6 +53,7 @@ esp_err_t valve_init(void)
     for (int i = 0; i <= SECTIONS_COUNT; i++) {
         s_sections[i].active        = false;
         s_sections[i].remaining_sec = 0;
+        s_sections[i].started_at    = 0;
     }
     apply_state();
     ESP_LOGI(TAG, "init OK, %d sections", SECTIONS_COUNT);
@@ -61,10 +64,12 @@ esp_err_t valve_section_on(uint8_t section, uint32_t duration_sec)
 {
     if (section < 1 || section > SECTIONS_COUNT) return ESP_ERR_INVALID_ARG;
     xSemaphoreTake(s_mutex, portMAX_DELAY);
+    time_t now = time(NULL);
     // Tryb ekskluzywny: wyłącz wszystkie inne sekcje przed włączeniem
     for (int i = 1; i <= SECTIONS_COUNT; i++) {
         s_sections[i].active        = (i == section);
         s_sections[i].remaining_sec = (i == section) ? duration_sec : 0;
+        s_sections[i].started_at    = (i == section) ? now : 0;
     }
     apply_state();
     xSemaphoreGive(s_mutex);
@@ -79,6 +84,7 @@ esp_err_t valve_section_off(uint8_t section)
     xSemaphoreTake(s_mutex, portMAX_DELAY);
     s_sections[section].active        = false;
     s_sections[section].remaining_sec = 0;
+    s_sections[section].started_at    = 0;
     apply_state();
     xSemaphoreGive(s_mutex);
     ESP_LOGI(TAG, "section %d OFF", section);
@@ -88,11 +94,13 @@ esp_err_t valve_section_off(uint8_t section)
 
 esp_err_t valve_sections_on(uint8_t section_mask, uint32_t duration_sec)
 {
+    time_t now = time(NULL);
     xSemaphoreTake(s_mutex, portMAX_DELAY);
     for (int i = 1; i <= SECTIONS_COUNT; i++) {
         if (section_mask & (1 << (i - 1))) {
             s_sections[i].active        = true;
             s_sections[i].remaining_sec = duration_sec;
+            s_sections[i].started_at    = now;
         }
     }
     apply_state();
@@ -109,6 +117,7 @@ esp_err_t valve_all_off(void)
     for (int i = 0; i <= SECTIONS_COUNT; i++) {
         s_sections[i].active        = false;
         s_sections[i].remaining_sec = 0;
+        s_sections[i].started_at    = 0;
     }
     apply_state();
     xSemaphoreGive(s_mutex);
@@ -138,6 +147,12 @@ uint32_t valve_get_remaining_sec(uint8_t section)
 {
     if (section < 1 || section > SECTIONS_COUNT) return 0;
     return s_sections[section].remaining_sec;
+}
+
+time_t valve_get_started_at(uint8_t section)
+{
+    if (section < 1 || section > SECTIONS_COUNT) return 0;
+    return s_sections[section].started_at;
 }
 
 // Task tick co 1 sekundę - odlicza czasy trwania sekcji
