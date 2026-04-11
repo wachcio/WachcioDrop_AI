@@ -38,48 +38,46 @@ static const char *MAIN_MENU[] = {
 
 static void draw_home(void)
 {
-    char buf[32];
+    char buf[18];
 
-    // Wiersz 0: czas — używaj zegara systemowego (zsync z DS3231/NTP), bez I2C co 100ms
+    // Wiersz 0: czas
     time_t now = time(NULL);
     struct tm t;
     localtime_r(&now, &t);
     strftime(buf, sizeof(buf), "%H:%M %d-%m-%Y", &t);
     display_text_full(0, buf, false);
 
-    // Wiersz 1: separator (stały — rysuj raz, nie czyść)
-    display_text_full(1, "----------------", false);
-
-    // Wiersz 2: stan sekcji M,1-3
     uint8_t mask = valve_get_active_mask();
-    bool master  = (mask != 0);
-    buf[0]  = 'M'; buf[1]  = ':'; buf[2]  = master      ? '#' : '-'; buf[3]  = ' ';
-    buf[4]  = '1'; buf[5]  = ':'; buf[6]  = (mask & 1)  ? '#' : '-'; buf[7]  = ' ';
-    buf[8]  = '2'; buf[9]  = ':'; buf[10] = (mask & 2)  ? '#' : '-'; buf[11] = ' ';
-    buf[12] = '3'; buf[13] = ':'; buf[14] = (mask & 4)  ? '#' : '-'; buf[15] = '\0';
+
+    // Wiersz 1: sekcje 1-4  "1:# 2:- 3:# 4:-"
+    snprintf(buf, sizeof(buf), "1:%c 2:%c 3:%c 4:%c",
+             (mask & (1<<0)) ? '#' : '-',
+             (mask & (1<<1)) ? '#' : '-',
+             (mask & (1<<2)) ? '#' : '-',
+             (mask & (1<<3)) ? '#' : '-');
+    display_text_full(1, buf, false);
+
+    // Wiersz 2: sekcje 5-8  "5:# 6:- 7:# 8:-"
+    snprintf(buf, sizeof(buf), "5:%c 6:%c 7:%c 8:%c",
+             (mask & (1<<4)) ? '#' : '-',
+             (mask & (1<<5)) ? '#' : '-',
+             (mask & (1<<6)) ? '#' : '-',
+             (mask & (1<<7)) ? '#' : '-');
     display_text_full(2, buf, false);
 
-    // Wiersz 3: sekcje 4-7
-    buf[0]  = '4'; buf[1]  = ':'; buf[2]  = (mask & 8)  ? '#' : '-'; buf[3]  = ' ';
-    buf[4]  = '5'; buf[5]  = ':'; buf[6]  = (mask & 16) ? '#' : '-'; buf[7]  = ' ';
-    buf[8]  = '6'; buf[9]  = ':'; buf[10] = (mask & 32) ? '#' : '-'; buf[11] = ' ';
-    buf[12] = '7'; buf[13] = ':'; buf[14] = (mask & 64) ? '#' : '-'; buf[15] = '\0';
+    // Wiersz 3: zawór główny
+    bool master = (mask != 0);
+    snprintf(buf, sizeof(buf), "Glowny:%s", master ? "OTWARTY" : "ZAMKNIETY");
     display_text_full(3, buf, false);
 
-    // Wiersz 4: sekcja 8
-    buf[0] = '8'; buf[1] = ':'; buf[2] = (mask & 128) ? '#' : '-'; buf[3] = '\0';
-    display_text_full(4, buf, false);
-
-    // Wiersz 5: WiFi status
+    // Wiersz 4: WiFi
     wifi_state_t ws = wifi_get_state();
     const char *wifi_str = (ws == WIFI_STATE_CONNECTED) ? "WiFi: OK" :
                            (ws == WIFI_STATE_AP_MODE)   ? "WiFi: AP" : "WiFi: --";
-    display_text_full(5, wifi_str, false);
+    display_text_full(4, wifi_str, false);
 
-    // Wiersz 6: pusty
+    display_text_full(5, "", false);
     display_text_full(6, "", false);
-
-    // Wiersz 7: hint
     display_text_full(7, "Pokret=menu", false);
 }
 
