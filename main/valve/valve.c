@@ -61,11 +61,14 @@ esp_err_t valve_section_on(uint8_t section, uint32_t duration_sec)
 {
     if (section < 1 || section > SECTIONS_COUNT) return ESP_ERR_INVALID_ARG;
     xSemaphoreTake(s_mutex, portMAX_DELAY);
-    s_sections[section].active        = true;
-    s_sections[section].remaining_sec = duration_sec;
+    // Tryb ekskluzywny: wyłącz wszystkie inne sekcje przed włączeniem
+    for (int i = 1; i <= SECTIONS_COUNT; i++) {
+        s_sections[i].active        = (i == section);
+        s_sections[i].remaining_sec = (i == section) ? duration_sec : 0;
+    }
     apply_state();
     xSemaphoreGive(s_mutex);
-    ESP_LOGI(TAG, "section %d ON (duration=%lus)", section, (unsigned long)duration_sec);
+    ESP_LOGI(TAG, "section %d ON exclusive (duration=%lus)", section, (unsigned long)duration_sec);
     if (s_state_cb) s_state_cb();
     return ESP_OK;
 }

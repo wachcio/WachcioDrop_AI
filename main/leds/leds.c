@@ -13,6 +13,7 @@ static void shift_out(uint16_t data)
 {
     // Wyślij 16 bitów MSB-first przez bit-bang
     // Sekwencja: SER → data bit, SRCLK ↑ → shift, po 16 bitach RCLK ↑ → latch
+    data = ~data;  // active-low: inwertuj — bit=1 w logice → LOW na wyjściu
     for (int i = 15; i >= 0; i--) {
         gpio_set_level(PIN_595_SER, (data >> i) & 1);
         gpio_set_level(PIN_595_SRCLK, 1);
@@ -47,6 +48,9 @@ esp_err_t leds_init(void)
     gpio_set_level(PIN_595_SER,   0);
     gpio_set_level(PIN_595_SRCLK, 0);
     gpio_set_level(PIN_595_RCLK,  0);
+
+    // Najpierw wyzeruj oba chipy (usuwa losowy stan po power-on)
+    shift_out(0x0000);
 
     // Zapal LED zasilanie, reszta OFF
     s_state = BIT_LED_POWER;

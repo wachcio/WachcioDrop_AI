@@ -31,7 +31,13 @@ void app_main(void)
     ESP_LOGI(TAG, "ESP32-S3 N16R8 | ESP-IDF %s", esp_get_idf_version());
 
     // ------------------------------------------------------------------
-    // 1. NVS - musi być przed wszystkimi modułami używającymi storage
+    // 1. LED driver (74HC595) - PIERWSZE: zeruje chipy, zapobiega
+    //    losowemu stanowi wyjść przy power-on
+    // ------------------------------------------------------------------
+    ESP_ERROR_CHECK(leds_init());
+
+    // ------------------------------------------------------------------
+    // 2. NVS - musi być przed wszystkimi modułami używającymi storage
     // ------------------------------------------------------------------
     ESP_ERROR_CHECK(storage_init());
     ESP_ERROR_CHECK(storage_load_config(&g_config));
@@ -43,11 +49,6 @@ void app_main(void)
         storage_save_config(&g_config);
         ESP_LOGI(TAG, "generated API token: %s", g_config.api_token);
     }
-
-    // ------------------------------------------------------------------
-    // 2. LED driver (74HC595) - zapalamy LED zasilania
-    // ------------------------------------------------------------------
-    ESP_ERROR_CHECK(leds_init());
 
     // ------------------------------------------------------------------
     // 3. Zawory SSR (przez 74HC595)
