@@ -68,6 +68,10 @@ esp_err_t storage_load_config(app_config_t *cfg)
     nvs_get_u8(h, NVS_KEY_IRRIG_TODAY, &today);
     cfg->irrigation_today = (bool)today;
 
+    uint8_t ignore_php = 0;
+    nvs_get_u8(h, NVS_KEY_IGNORE_PHP, &ignore_php);
+    cfg->ignore_php = (bool)ignore_php;
+
     nvs_close(h);
     ESP_LOGI(TAG, "config loaded (ssid='%s' ntp='%s')",
              cfg->wifi_ssid, cfg->ntp_server);
@@ -91,8 +95,9 @@ esp_err_t storage_save_config(const app_config_t *cfg)
     SAVE_STR(NVS_KEY_NTP_SERVER, ntp_server);
     #undef SAVE_STR
 
-    nvs_set_i8(h, NVS_KEY_TZ_OFFSET,  cfg->timezone_offset);
+    nvs_set_i8(h, NVS_KEY_TZ_OFFSET,   cfg->timezone_offset);
     nvs_set_u8(h, NVS_KEY_IRRIG_TODAY, (uint8_t)cfg->irrigation_today);
+    nvs_set_u8(h, NVS_KEY_IGNORE_PHP,  (uint8_t)cfg->ignore_php);
 
     err = nvs_commit(h);
     nvs_close(h);
@@ -180,6 +185,9 @@ esp_err_t storage_load_groups(irrigation_group_t *groups, uint8_t count)
         snprintf(key, sizeof(key), "g%02d", i);
         size_t len = sizeof(irrigation_group_t);
         nvs_get_blob(h, key, &groups[i], &len);
+        groups[i].id = i + 1;  // zawsze ustaw poprawne id (1-based)
+        if (groups[i].name[0] == '\0')
+            snprintf(groups[i].name, sizeof(groups[i].name), "Grupa %d", i + 1);
     }
     nvs_close(h);
     return ESP_OK;

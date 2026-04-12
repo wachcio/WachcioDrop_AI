@@ -41,6 +41,10 @@ esp_err_t daily_check_now(void)
         ESP_LOGI(TAG, "PHP URL not configured, skipping");
         return ESP_OK;
     }
+    if (g_config.ignore_php) {
+        ESP_LOGI(TAG, "ignore_php=true, skipping PHP check");
+        return ESP_OK;
+    }
     if (wifi_get_state() != WIFI_STATE_CONNECTED) {
         ESP_LOGW(TAG, "WiFi not connected, skipping");
         return ESP_ERR_INVALID_STATE;

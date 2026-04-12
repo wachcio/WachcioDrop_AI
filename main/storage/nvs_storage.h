@@ -18,6 +18,7 @@
 #define NVS_KEY_NTP_SERVER      "ntp_server"
 #define NVS_KEY_TZ_OFFSET       "tz_offset"
 #define NVS_KEY_IRRIG_TODAY     "irrig_today"
+#define NVS_KEY_IGNORE_PHP      "ignore_php"
 
 typedef struct {
     char    wifi_ssid[64];
@@ -30,6 +31,7 @@ typedef struct {
     char    ntp_server[64];
     int8_t  timezone_offset;
     bool    irrigation_today;
+    bool    ignore_php;        // true = ignoruj wynik PHP check, zawsze nawadniaj
 } app_config_t;
 
 typedef struct {

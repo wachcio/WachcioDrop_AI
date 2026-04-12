@@ -12,6 +12,7 @@ static const char *TAG = "groups";
 
 static irrigation_group_t s_groups[GROUPS_MAX];
 static SemaphoreHandle_t  s_mutex;
+static uint8_t            s_active_group_id = 0; // 0 = brak aktywnej grupy
 
 esp_err_t groups_init(void)
 {
@@ -54,6 +55,9 @@ esp_err_t groups_set(const irrigation_group_t *group)
     return storage_save_group(group);
 }
 
+uint8_t groups_get_active_id(void) { return s_active_group_id; }
+void    groups_clear_active(void)  { s_active_group_id = 0; }
+
 uint8_t groups_expand_mask(uint16_t group_mask)
 {
     uint8_t sections = 0;
@@ -78,6 +82,7 @@ esp_err_t groups_activate(uint8_t group_id, uint32_t duration_sec)
     }
     ESP_LOGI(TAG, "group %d activate: sections=0x%02X duration=%lus",
              group_id, sections, (unsigned long)duration_sec);
-    valve_all_off();
+    valve_all_off();               // czyści active_group_id wewnątrz
+    s_active_group_id = group_id; // ustaw PO all_off
     return valve_sections_on(sections, duration_sec);
 }

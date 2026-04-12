@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
-import { Play, Pencil, Save, X, Droplets } from 'lucide-react'
+import { Play, Pencil, Save, X, Droplets, Plus } from 'lucide-react'
 import { apiGetGroups, apiSetGroup, apiActivateGroup, Group } from '../api/client'
 
 const SECTIONS = [1, 2, 3, 4, 5, 6, 7, 8]
@@ -23,6 +23,21 @@ function GroupCard({
 }) {
   const sections = SECTIONS.filter(s => group.section_mask & (1 << (s - 1)))
   const empty = sections.length === 0
+
+  // Pusta karta — "dodaj grupę"
+  if (empty && group.name === `Grupa ${group.id}`) {
+    return (
+      <button
+        onClick={() => onEdit(group)}
+        className="bg-white rounded-2xl border-2 border-dashed border-gray-200
+          hover:border-green-300 hover:bg-green-50 p-4 flex flex-col items-center
+          justify-center gap-2 transition-colors text-gray-400 hover:text-green-600 min-h-32"
+      >
+        <Plus size={24} />
+        <span className="text-sm font-medium">Dodaj grupę {group.id}</span>
+      </button>
+    )
+  }
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex flex-col gap-3">
@@ -85,12 +100,15 @@ function EditModal({
   saving: boolean
 }) {
   const set = (patch: Partial<Group>) => onChange({ ...group, ...patch })
+  const isNew = group.section_mask === 0
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-5 flex flex-col gap-4">
 
-        <h3 className="font-bold text-gray-800">Edytuj grupę #{group.id}</h3>
+        <h3 className="font-bold text-gray-800">
+          {isNew ? `Nowa grupa #${group.id}` : `Edytuj grupę #${group.id}`}
+        </h3>
 
         <div>
           <label className="text-xs text-gray-500 block mb-1">Nazwa</label>
@@ -174,7 +192,8 @@ export default function Groups() {
   const activate = async (id: number) => {
     try {
       await apiActivateGroup(id, duration)
-      toast.success(`Grupa ${id} uruchomiona (${formatSec(duration)})`)
+      const g = groups.find(g => g.id === id)
+      toast.success(`${g?.name ?? `Grupa ${id}`} uruchomiona (${formatSec(duration)})`)
     } catch {
       toast.error('Błąd uruchamiania grupy')
     }

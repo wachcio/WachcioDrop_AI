@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
-import { Wifi, Clock, Thermometer, Power, Droplets, WifiOff, KeyRound } from 'lucide-react'
+import { Wifi, Clock, Thermometer, Power, Droplets, WifiOff, KeyRound, Globe, CloudOff, Layers } from 'lucide-react'
 import {
-  apiGetStatus, apiSectionOn, apiSectionOff, apiAllOff,
-  SystemStatus, SectionState
+  apiGetStatus, apiSectionOn, apiSectionOff, apiAllOff, apiSetIrrigation, apiActivateGroup,
+  SystemStatus, SectionState, GroupStatus
 } from '../api/client'
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
@@ -34,6 +34,21 @@ function rssiStrength(rssi: number): { bars: number; label: string; color: strin
   if (rssi >= -65) return { bars: 3, label: 'Dobry',     color: 'text-green-400' }
   if (rssi >= -75) return { bars: 2, label: 'Słaby',     color: 'text-yellow-400' }
   return             { bars: 1, label: 'Bardzo słaby', color: 'text-red-400' }
+}
+
+// ─── ToggleSwitch ─────────────────────────────────────────────────────────────
+
+function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+  return (
+    <button
+      onClick={() => onChange(!checked)}
+      className={`relative inline-flex w-12 h-6 rounded-full transition-colors shrink-0
+        ${checked ? 'bg-green-500' : 'bg-gray-300'}`}
+    >
+      <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow
+        transition-transform ${checked ? 'translate-x-6' : ''}`} />
+    </button>
+  )
 }
 
 // ─── RssiIcon ─────────────────────────────────────────────────────────────────
@@ -86,6 +101,70 @@ function SectionCard({
       <span className="font-bold text-base z-10">Sekcja {id}</span>
 
       <span className={`text-xs font-mono z-10 ${active ? 'text-green-100' : 'text-gray-400'}`}>
+        {active ? formatCountdown(remaining_sec) : 'OFF'}
+      </span>
+    </button>
+  )
+}
+
+// ─── GroupCard ────────────────────────────────────────────────────────────────
+
+function GroupCard({
+  group, duration, onActivate,
+}: {
+  group: GroupStatus
+  duration: number
+  onActivate: (id: number, active: boolean) => void
+}) {
+  const { id, name, active, remaining_sec, section_mask } = group
+  const empty = section_mask === 0
+  const sections = [1,2,3,4,5,6,7,8].filter(s => section_mask & (1 << (s-1)))
+
+  return (
+    <button
+      onClick={() => !empty && onActivate(id, active)}
+      disabled={empty}
+      className={`relative flex items-center gap-3 rounded-2xl px-4 py-3 w-full text-left
+        transition-all duration-200 active:scale-95 select-none
+        ${empty
+          ? 'bg-gray-50 text-gray-300 border border-dashed border-gray-200 cursor-not-allowed'
+          : active
+            ? 'bg-blue-500 text-white shadow-lg shadow-blue-200'
+            : 'bg-white text-gray-700 shadow-sm border border-gray-100 hover:border-blue-200'}`}
+    >
+      {active && (
+        <span className="absolute inset-0 rounded-2xl bg-blue-400 opacity-20 animate-pulse" />
+      )}
+
+      {/* Ikona + status */}
+      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 z-10
+        ${active ? 'bg-white/20' : 'bg-blue-50'}`}>
+        <Layers size={20} className={active ? 'text-white' : 'text-blue-500'} />
+      </div>
+
+      {/* Nazwa + sekcje */}
+      <div className="flex-1 min-w-0 z-10">
+        <div className="flex items-center gap-2">
+          <span className="font-bold text-sm">{name}</span>
+          {active && (
+            <span className="bg-white/30 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+              ON
+            </span>
+          )}
+        </div>
+        <div className="flex gap-1 mt-1 flex-wrap">
+          {sections.map(s => (
+            <span key={s} className={`text-xs px-1.5 py-0.5 rounded font-medium
+              ${active ? 'bg-white/25 text-white' : 'bg-blue-50 text-blue-600'}`}>
+              S{s}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* Countdown */}
+      <span className={`text-sm font-mono font-bold shrink-0 z-10
+        ${active ? 'text-white' : 'text-gray-400'}`}>
         {active ? formatCountdown(remaining_sec) : 'OFF'}
       </span>
     </button>
@@ -213,6 +292,22 @@ export default function Dashboard() {
     }
   }
 
+  const activateGroup = async (id: number, active: boolean) => {
+    try {
+      if (active) {
+        await apiAllOff()
+        toast.success('Grupa wyłączona')
+      } else {
+        await apiActivateGroup(id, duration)
+        const g = status?.groups.find(g => g.id === id)
+        toast.success(`${g?.name ?? `Grupa ${id}`} włączona (${formatDuration(duration)})`)
+      }
+      load()
+    } catch {
+      toast.error('Błąd komunikacji z ESP32')
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-48 text-gray-400">
@@ -325,8 +420,87 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* Grupy */}
+      {status.groups.some(g => g.section_mask !== 0) && (
+        <div>
+          <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3">Grupy</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {status.groups.filter(g => g.section_mask !== 0).map(g => (
+              <GroupCard
+                key={g.id}
+                group={g}
+                duration={duration}
+                onActivate={activateGroup}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Slider czasu */}
       <DurationSlider value={duration} onChange={setDuration} />
+
+      {/* Sterowanie nawadnianiem */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex flex-col gap-3">
+        <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Sterowanie</h2>
+
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0
+              ${status.irrigation_today ? 'bg-green-100' : 'bg-red-100'}`}>
+              <Droplets size={18} className={status.irrigation_today ? 'text-green-600' : 'text-red-500'} />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-800">Nawadnianie dziś</p>
+              <p className="text-xs text-gray-400">
+                {status.irrigation_today ? 'Aktywne — harmonogram będzie wykonany' : 'Zablokowane — harmonogram pominięty'}
+              </p>
+            </div>
+          </div>
+          <ToggleSwitch
+            checked={status.irrigation_today}
+            onChange={async (v) => {
+              try {
+                await apiSetIrrigation(v, undefined)
+                toast.success(v ? 'Nawadnianie aktywowane' : 'Nawadnianie zablokowane')
+                load()
+              } catch { toast.error('Błąd') }
+            }}
+          />
+        </div>
+
+        {status.php_url_set && (
+          <>
+            <div className="border-t border-gray-50" />
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0
+                  ${status.ignore_php ? 'bg-orange-100' : 'bg-blue-100'}`}>
+                  {status.ignore_php
+                    ? <CloudOff size={18} className="text-orange-500" />
+                    : <Globe    size={18} className="text-blue-500" />}
+                </div>
+                <div>
+                  <p className="text-sm font-medium text-gray-800">Skrypt PHP</p>
+                  <p className="text-xs text-gray-400">
+                    {status.ignore_php ? 'Ignorowany — decyzja manualna' : 'Aktywny — decyzja z internetu'}
+                  </p>
+                </div>
+              </div>
+              <ToggleSwitch
+                checked={status.ignore_php}
+                onChange={async (v) => {
+                  try {
+                    await apiSetIrrigation(undefined, v)
+                    toast.success(v ? 'PHP check wyłączony' : 'PHP check włączony')
+                    load()
+                  } catch { toast.error('Błąd') }
+                }}
+              />
+            </div>
+          </>
+        )}
+      </div>
 
     </div>
   )

@@ -98,6 +98,8 @@ Odpowiedź:
   "sections_active": 1,
   "master_active": true,
   "irrigation_today": true,
+  "ignore_php": false,
+  "php_url_set": true,
   "time": "2025-06-15T10:30:00",
   "sections": [
     {
@@ -138,12 +140,24 @@ Odpowiedź:
 }
 ```
 
+Pola statusu:
+| Pole | Opis |
+|------|------|
+| `irrigation_today` | Czy nawadnianie jest dozwolone dziś (wynik PHP check lub ręczne ustawienie) |
+| `ignore_php` | Czy urządzenie ignoruje wynik skryptu PHP (nawadnia zawsze) |
+| `php_url_set` | Czy skonfigurowano URL skryptu PHP (jeśli `false`, `ignore_php` nie ma sensu) |
+
 Pola sekcji/grup:
 | Pole | Opis |
 |------|------|
 | `started_at` | Czas włączenia (ISO 8601, czas lokalny), `null` gdy nieaktywna |
 | `ends_at` | Przewidywany czas wyłączenia, `null` gdy bezterminowo lub nieaktywna |
 | `remaining_sec` | Pozostały czas w sekundach, `null` gdy bezterminowo lub nieaktywna |
+
+Pole `active` dla grup:
+- `true` tylko wtedy, gdy ta konkretna grupa została aktywowana przez `POST /api/groups/{id}/activate`
+- Ręczne włączenie sekcji kasuje aktywną grupę (`active: false` dla wszystkich grup)
+- W danej chwili co najwyżej jedna grupa może mieć `active: true`
 
 ---
 
@@ -264,7 +278,7 @@ curl -X PUT \
 ---
 
 ### POST /api/groups/{id}/activate
-Aktywuj grupę ręcznie.
+Aktywuj grupę ręcznie. Najpierw wyłącza wszystkie sekcje (`all_off`), następnie włącza sekcje należące do grupy. Tylko jedna grupa może być aktywna jednocześnie.
 
 ```bash
 # Włącz grupę 1 na 15 minut
@@ -274,6 +288,48 @@ curl -X POST \
   -d '{"duration": 900}' \
   http://192.168.20.230/api/groups/1/activate
 ```
+
+Odpowiedź:
+```json
+{"ok": true}
+```
+
+---
+
+## Nawadnianie
+
+### POST /api/irrigation
+Ręczne ustawienie flagi `irrigation_today` lub `ignore_php`. Można podać jedno lub oba pola.
+
+```bash
+# Wymuś nawadnianie dziś (niezależnie od PHP)
+curl -X POST \
+  -H "Authorization: Bearer TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"irrigation_today": true}' \
+  http://192.168.20.230/api/irrigation
+
+# Ignoruj wynik skryptu PHP (nawadniaj zawsze gdy harmonogram)
+curl -X POST \
+  -H "Authorization: Bearer TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"ignore_php": true}' \
+  http://192.168.20.230/api/irrigation
+
+# Ustaw oba pola jednocześnie
+curl -X POST \
+  -H "Authorization: Bearer TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"irrigation_today": false, "ignore_php": false}' \
+  http://192.168.20.230/api/irrigation
+```
+
+Odpowiedź:
+```json
+{"ok": true}
+```
+
+> Ustawienia są zapisywane do NVS i przeżywają restart.
 
 ---
 
@@ -291,9 +347,11 @@ Odpowiedź:
 {
   "time": "2025-06-15T10:30:00",
   "unix": 1750000200,
-  "tz": 1
+  "tz": 2
 }
 ```
+
+> Pole `time` zawiera **czas lokalny** (uwzględnia offset strefy czasowej z `tz_offset`). Pole `unix` to timestamp UTC. Pole `tz` to aktualnie skonfigurowany offset w godzinach.
 
 ---
 

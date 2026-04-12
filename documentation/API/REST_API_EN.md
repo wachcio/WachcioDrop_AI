@@ -98,6 +98,8 @@ Response:
   "sections_active": 1,
   "master_active": true,
   "irrigation_today": true,
+  "ignore_php": false,
+  "php_url_set": true,
   "time": "2025-06-15T10:30:00",
   "sections": [
     {
@@ -138,12 +140,24 @@ Response:
 }
 ```
 
+Status fields:
+| Field | Description |
+|-------|-------------|
+| `irrigation_today` | Whether irrigation is allowed today (PHP check result or manual override) |
+| `ignore_php` | Whether the device ignores the PHP script result (always irrigates on schedule) |
+| `php_url_set` | Whether a PHP script URL is configured (`false` means `ignore_php` is irrelevant) |
+
 Section/group fields:
 | Field | Description |
 |-------|-------------|
 | `started_at` | Start time (ISO 8601, local time), `null` when inactive |
 | `ends_at` | Expected end time, `null` when indefinite or inactive |
 | `remaining_sec` | Remaining time in seconds, `null` when indefinite or inactive |
+
+`active` field for groups:
+- `true` only when that specific group was activated via `POST /api/groups/{id}/activate`
+- Manually turning on any section clears the active group (`active: false` for all groups)
+- At most one group can have `active: true` at any given time
 
 ---
 
@@ -264,7 +278,7 @@ curl -X PUT \
 ---
 
 ### POST /api/groups/{id}/activate
-Manually activate a group.
+Manually activate a group. First turns off all sections (`all_off`), then activates the sections belonging to this group. Only one group can be active at a time.
 
 ```bash
 # Turn on group 1 for 15 minutes
@@ -274,6 +288,48 @@ curl -X POST \
   -d '{"duration": 900}' \
   http://192.168.20.230/api/groups/1/activate
 ```
+
+Response:
+```json
+{"ok": true}
+```
+
+---
+
+## Irrigation
+
+### POST /api/irrigation
+Manually set the `irrigation_today` flag or `ignore_php`. One or both fields can be provided.
+
+```bash
+# Force irrigation today (regardless of PHP)
+curl -X POST \
+  -H "Authorization: Bearer TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"irrigation_today": true}' \
+  http://192.168.20.230/api/irrigation
+
+# Ignore PHP script result (always irrigate on schedule)
+curl -X POST \
+  -H "Authorization: Bearer TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"ignore_php": true}' \
+  http://192.168.20.230/api/irrigation
+
+# Set both fields at once
+curl -X POST \
+  -H "Authorization: Bearer TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"irrigation_today": false, "ignore_php": false}' \
+  http://192.168.20.230/api/irrigation
+```
+
+Response:
+```json
+{"ok": true}
+```
+
+> Settings are saved to NVS and survive a reboot.
 
 ---
 
@@ -291,9 +347,11 @@ Response:
 {
   "time": "2025-06-15T10:30:00",
   "unix": 1750000200,
-  "tz": 1
+  "tz": 2
 }
 ```
+
+> The `time` field contains **local time** (applies the `tz_offset` from settings). The `unix` field is a UTC timestamp. The `tz` field is the currently configured offset in hours.
 
 ---
 

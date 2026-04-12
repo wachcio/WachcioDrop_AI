@@ -1,13 +1,29 @@
+# ESP-IDF build artifacts
 build/
 sdkconfig
 sdkconfig.old
-*.pyc
-__pycache__/
-.idea/
-.vscode/settings.json
-frontend/node_modules/
-frontend/dist/
-spiffs_image/
 *.bin
 *.elf
 *.map
+
+# Python
+*.pyc
+__pycache__/
+
+# IDE
+.idea/
+.vscode/settings.json
+
+# Frontend — dependencies & build output & cache
+frontend/node_modules/
+frontend/.vite/
+frontend/dist/
+spiffs_image/
+
+# Frontend — env files (mogą zawierać tokeny)
+frontend/.env
+frontend/.env.*
+
+# Logi
+*.log
+npm-debug.log*

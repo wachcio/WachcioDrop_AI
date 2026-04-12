@@ -37,6 +37,14 @@ export interface SectionsResponse {
   sections: SectionState[]
 }
 
+export interface GroupStatus {
+  id: number
+  name: string
+  section_mask: number
+  active: boolean
+  remaining_sec: number | null
+}
+
 export interface SystemStatus {
   uptime_sec: number
   ip: string
@@ -44,9 +52,18 @@ export interface SystemStatus {
   sections_active: number
   master_active: boolean
   irrigation_today: boolean
+  ignore_php: boolean
+  php_url_set: boolean
   time: string
   sections: SectionState[]
+  groups: GroupStatus[]
 }
+
+export const apiSetIrrigation = (irrigation_today?: boolean, ignore_php?: boolean) =>
+  api.post('/api/irrigation', {
+    ...(irrigation_today !== undefined && { irrigation_today }),
+    ...(ignore_php      !== undefined && { ignore_php }),
+  })
 
 export interface ScheduleEntry {
   id: number

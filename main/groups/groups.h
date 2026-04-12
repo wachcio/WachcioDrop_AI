@@ -20,3 +20,9 @@ uint8_t groups_expand_mask(uint16_t group_mask);
 
 // Aktywuj grupę na czas duration_sec (wywołuje valve_sections_on z rozwinięciem)
 esp_err_t groups_activate(uint8_t group_id, uint32_t duration_sec);
+
+// Zwraca id aktywowanej grupowo grupy (0 = brak aktywnej grupy)
+uint8_t groups_get_active_id(void);
+
+// Czyści aktywną grupę (np. gdy sekcja zmieniona manualnie)
+void groups_clear_active(void);

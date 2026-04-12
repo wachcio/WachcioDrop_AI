@@ -99,6 +99,8 @@ static esp_err_t handle_status(httpd_req_t *req)
     cJSON_AddNumberToObject(root, "sections_active", __builtin_popcount(mask));
     cJSON_AddBoolToObject(root,   "master_active",  (bool)(leds_get() & BIT_MASTER));
     cJSON_AddBoolToObject(root,   "irrigation_today", g_irrigation_today);
+    cJSON_AddBoolToObject(root,   "ignore_php",      g_config.ignore_php);
+    cJSON_AddBoolToObject(root,   "php_url_set",     g_config.php_url[0] != '\0');
     cJSON_AddStringToObject(root, "time",           tstr);
 
     // Wszystkie sekcje
@@ -141,11 +143,14 @@ static esp_err_t handle_status(httpd_req_t *req)
         cJSON_AddItemToArray(sections_arr, s);
     }
 
-    // Wszystkie grupy
+    // Wszystkie grupy — aktywna jest tylko ta, którą jawnie aktywowano przez groups_activate()
     const irrigation_group_t *grps = groups_get_all();
+    uint8_t active_group_id = groups_get_active_id();
     cJSON *groups_arr = cJSON_AddArrayToObject(root, "groups");
     for (int i = 0; i < GROUPS_MAX; i++) {
-        bool grp_active = (grps[i].section_mask != 0) &&
+        bool grp_active = (active_group_id != 0) &&
+                          (grps[i].id == active_group_id) &&
+                          (grps[i].section_mask != 0) &&
                           ((mask & grps[i].section_mask) != 0);
 
         cJSON *g = cJSON_CreateObject();
@@ -910,6 +915,41 @@ static esp_err_t handle_options(httpd_req_t *req)
 }
 
 // --------------------------------------------------------------------------
+// POST /api/irrigation  — ręczna zmiana irrigation_today i ignore_php
+// Body: {"irrigation_today": true/false, "ignore_php": true/false}
+// --------------------------------------------------------------------------
+static esp_err_t handle_irrigation_post(httpd_req_t *req)
+{
+    CHECK_AUTH(req);
+
+    char body[128] = {0};
+    if (req->content_len > 0) read_body(req, body, sizeof(body));
+
+    cJSON *j = cJSON_Parse(body);
+    if (!j) {
+        httpd_resp_set_status(req, "400 Bad Request");
+        JSON_RESP(req, "{\"error\":\"invalid json\"}");
+        return ESP_OK;
+    }
+
+    cJSON *v;
+    if ((v = cJSON_GetObjectItem(j, "irrigation_today")) && cJSON_IsBool(v)) {
+        g_irrigation_today       = cJSON_IsTrue(v);
+        g_config.irrigation_today = g_irrigation_today;
+    }
+    if ((v = cJSON_GetObjectItem(j, "ignore_php")) && cJSON_IsBool(v)) {
+        g_config.ignore_php = cJSON_IsTrue(v);
+    }
+    cJSON_Delete(j);
+
+    storage_save_config(&g_config);
+    ESP_LOGI(TAG, "irrigation_today=%d ignore_php=%d",
+             g_irrigation_today, g_config.ignore_php);
+    JSON_RESP(req, "{\"ok\":true}");
+    return ESP_OK;
+}
+
+// --------------------------------------------------------------------------
 // Rejestracja
 // --------------------------------------------------------------------------
 esp_err_t rest_api_register(httpd_handle_t server)
@@ -920,6 +960,7 @@ esp_err_t rest_api_register(httpd_handle_t server)
 } while(0)
 
     REG("/api/status",                 HTTP_GET,    handle_status);
+    REG("/api/irrigation",             HTTP_POST,   handle_irrigation_post);
 
     REG("/api/sections",               HTTP_GET,    handle_sections_get);
     REG("/api/sections/*",             HTTP_POST,   handle_section_post);
