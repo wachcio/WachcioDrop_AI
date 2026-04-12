@@ -107,6 +107,7 @@ export const apiDelSchedule  = (id: number)                => api.delete(`/api/s
 export const apiGetGroups    = ()                          => api.get<Group[]>('/api/groups')
 export const apiSetGroup     = (id: number, g: Partial<Group>) =>
   api.put(`/api/groups/${id}`, g)
+export const apiDeleteGroup  = (id: number)                => api.delete(`/api/groups/${id}`)
 export const apiActivateGroup = (id: number, duration?: number) =>
   api.post(`/api/groups/${id}/activate`, { duration: duration ?? 0 })
 

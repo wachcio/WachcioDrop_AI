@@ -447,6 +447,29 @@ static esp_err_t handle_groups_put(httpd_req_t *req)
     return ESP_OK;
 }
 
+// DELETE /api/groups/{id} — reset grupy do domyślnych wartości
+static esp_err_t handle_groups_delete(httpd_req_t *req)
+{
+    CHECK_AUTH(req);
+
+    int id = 0;
+    sscanf(req->uri, "/api/groups/%d", &id);
+    if (id < 1 || id > GROUPS_MAX) {
+        httpd_resp_set_status(req, "400 Bad Request");
+        JSON_RESP(req, "{\"error\":\"invalid id\"}");
+        return ESP_OK;
+    }
+
+    irrigation_group_t g = {0};
+    g.id = (uint8_t)id;
+    snprintf(g.name, sizeof(g.name), "Grupa %d", id);
+    g.section_mask = 0;
+    groups_set(&g);
+
+    JSON_RESP(req, "{\"ok\":true}");
+    return ESP_OK;
+}
+
 // POST /api/groups/* — obsługuje /activate i zwykły POST (dispatch po URI)
 static esp_err_t handle_groups_post(httpd_req_t *req)
 {
@@ -972,6 +995,7 @@ esp_err_t rest_api_register(httpd_handle_t server)
     REG("/api/groups",                 HTTP_GET,    handle_groups_get);
     REG("/api/groups/*",               HTTP_POST,   handle_groups_post);
     REG("/api/groups/*",               HTTP_PUT,    handle_groups_put);
+    REG("/api/groups/*",               HTTP_DELETE, handle_groups_delete);
 
     REG("/api/settings/export",         HTTP_GET,    handle_settings_export);
     REG("/api/settings/import",        HTTP_PUT,    handle_settings_import);

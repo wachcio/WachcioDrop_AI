@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
-import { Play, Pencil, Save, X, Droplets, Plus } from 'lucide-react'
-import { apiGetGroups, apiSetGroup, apiActivateGroup, Group } from '../api/client'
+import { Play, Pencil, Save, X, Droplets, Plus, Trash2 } from 'lucide-react'
+import { apiGetGroups, apiSetGroup, apiDeleteGroup, apiActivateGroup, Group } from '../api/client'
 
 const SECTIONS = [1, 2, 3, 4, 5, 6, 7, 8]
 
@@ -91,16 +91,17 @@ function GroupCard({
 // ─── EditModal ─────────────────────────────────────────────────────────────────
 
 function EditModal({
-  group, onChange, onSave, onCancel, saving,
+  group, onChange, onSave, onCancel, onDelete, saving,
 }: {
   group: Group
   onChange: (g: Group) => void
   onSave: () => void
   onCancel: () => void
+  onDelete: () => void
   saving: boolean
 }) {
   const set = (patch: Partial<Group>) => onChange({ ...group, ...patch })
-  const isNew = group.section_mask === 0
+  const isNew = group.section_mask === 0 && group.name === `Grupa ${group.id}`
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 p-4">
@@ -151,10 +152,19 @@ function EditModal({
             <Save size={15} />
             {saving ? 'Zapisywanie…' : 'Zapisz'}
           </button>
+          {!isNew && (
+            <button
+              onClick={onDelete}
+              className="flex items-center justify-center gap-1.5 bg-red-50 hover:bg-red-100
+                text-red-500 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors"
+            >
+              <Trash2 size={15} />
+            </button>
+          )}
           <button
             onClick={onCancel}
             className="flex items-center justify-center gap-1.5 bg-gray-100 hover:bg-gray-200
-              text-gray-600 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors"
+              text-gray-600 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors"
           >
             <X size={15} />
           </button>
@@ -185,6 +195,20 @@ export default function Groups() {
       load()
     } catch {
       toast.error('Błąd zapisu')
+    }
+    setSaving(false)
+  }
+
+  const deleteGroup = async () => {
+    if (!editing) return
+    setSaving(true)
+    try {
+      await apiDeleteGroup(editing.id)
+      toast.success(`Grupa ${editing.id} usunięta`)
+      setEditing(null)
+      load()
+    } catch {
+      toast.error('Błąd usuwania grupy')
     }
     setSaving(false)
   }
@@ -243,6 +267,7 @@ export default function Groups() {
           onChange={setEditing}
           onSave={save}
           onCancel={() => setEditing(null)}
+          onDelete={deleteGroup}
           saving={saving}
         />
       )}
