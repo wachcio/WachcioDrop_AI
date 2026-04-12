@@ -78,5 +78,6 @@ esp_err_t groups_activate(uint8_t group_id, uint32_t duration_sec)
     }
     ESP_LOGI(TAG, "group %d activate: sections=0x%02X duration=%lus",
              group_id, sections, (unsigned long)duration_sec);
+    valve_all_off();
     return valve_sections_on(sections, duration_sec);
 }
