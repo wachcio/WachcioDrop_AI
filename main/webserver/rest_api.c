@@ -98,9 +98,11 @@ static esp_err_t handle_info(httpd_req_t *req)
     cJSON_AddNumberToObject(root, "flash_mb",     CONFIG_ESPTOOLPY_FLASHSIZE_16MB ? 16 : 4);
     cJSON_AddNumberToObject(root, "psram_kb",     esp_psram_get_size() / 1024);
     cJSON_AddNumberToObject(root, "heap_free",    esp_get_free_heap_size());
-    cJSON_AddNumberToObject(root, "sections",     SECTIONS_COUNT);
-    cJSON_AddNumberToObject(root, "groups_max",   GROUPS_MAX);
-    cJSON_AddNumberToObject(root, "schedule_max", SCHEDULE_ENTRIES);
+    cJSON_AddNumberToObject(root, "sections",          SECTIONS_COUNT);
+    cJSON_AddNumberToObject(root, "groups_max",        GROUPS_MAX);
+    cJSON_AddNumberToObject(root, "schedule_max",      SCHEDULE_ENTRIES);
+    cJSON_AddNumberToObject(root, "daily_check_hour",  DAILY_CHECK_HOUR);
+    cJSON_AddNumberToObject(root, "daily_check_minute", DAILY_CHECK_MINUTE);
 
     char *s = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
 import { KeyRound, Wifi, Radio, Globe, Clock, Save, RefreshCw, SlidersHorizontal, Droplets, CloudOff } from 'lucide-react'
-import { apiGetSettings, apiSaveSettings, apiGetTime, apiSetDateTime, apiGetStatus, apiSetIrrigation, Settings, setToken, SystemStatus } from '../api/client'
+import { apiGetSettings, apiSaveSettings, apiGetTime, apiSetDateTime, apiGetStatus, apiSetIrrigation, api, Settings, setToken, SystemStatus } from '../api/client'
 
 export type ScheduleMode = 'sections' | 'groups'
 export const SCHEDULE_MODE_KEY = 'schedule_mode'
@@ -90,6 +90,7 @@ export default function SettingsPage() {
   const [scheduleMode, setScheduleMode] = useState<ScheduleMode>(getScheduleMode())
   const [pendingMode, setPendingMode]   = useState<ScheduleMode | null>(null)
   const [devStatus, setDevStatus]       = useState<SystemStatus | null>(null)
+  const [checkTime, setCheckTime]       = useState<string>('')
   const [cfg, setCfg] = useState<Settings>({
     wifi_ssid: '', mqtt_uri: '', mqtt_user: '', php_url: '',
     ntp_server: 'pool.ntp.org', tz_offset: 2,
@@ -105,6 +106,12 @@ export default function SettingsPage() {
     apiGetSettings().then(r => setCfg(r.data)).catch(() => {})
     apiGetTime().then(r => setRtcTime(r.data.time.replace('T', ' '))).catch(() => {})
     apiGetStatus().then(r => setDevStatus(r.data)).catch(() => {})
+    api.get<{ daily_check_hour: number; daily_check_minute: number }>('/api/info')
+      .then(r => {
+        const h = String(r.data.daily_check_hour).padStart(2, '0')
+        const m = String(r.data.daily_check_minute).padStart(2, '0')
+        setCheckTime(`${h}:${m}`)
+      }).catch(() => {})
   }, [])
 
   // Lokalny tick co 1s — inkrementuje czas bez odpytywania API
@@ -133,6 +140,7 @@ export default function SettingsPage() {
         api_token:  pass.token || undefined,
       } as any)
       toast.success('Ustawienia zapisane')
+      apiGetStatus().then(r => setDevStatus(r.data)).catch(() => {})
     } catch {
       toast.error('Błąd zapisu ustawień')
     }
@@ -316,55 +324,87 @@ export default function SettingsPage() {
         )}
 
         {tab === 'uslugi' && (
-          <div className="flex flex-col gap-4">
-            <Field label="PHP URL (daily check)">
-              <input value={cfg.php_url}
-                onChange={e => setCfg({ ...cfg, php_url: e.target.value })}
-                placeholder="http://example.com/check.php"
-                className={inputCls} />
-            </Field>
-            {devStatus && devStatus.php_url_set && (
-              <div className="flex items-center justify-between gap-3 py-1">
-                <div className="flex items-center gap-3">
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0
-                    ${devStatus.ignore_php ? 'bg-orange-100' : 'bg-blue-100'}`}>
-                    {devStatus.ignore_php
-                      ? <CloudOff size={18} className="text-orange-500" />
-                      : <Globe    size={18} className="text-blue-500" />}
+          <div className="flex flex-col gap-5">
+
+            {/* Skrypt zewnętrzny */}
+            <div>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+                Skrypt zewnętrzny
+              </p>
+              <div className="flex flex-col gap-3">
+                <Field label={`URL skryptu (sprawdzanie codziennie o ${checkTime || '…'})`}>
+                  {(() => {
+                    const url = cfg.php_url
+                    const invalid = url.length > 0 && !/^https?:\/\/.+\..+/.test(url)
+                    return (
+                      <>
+                        <input value={url}
+                          onChange={e => setCfg({ ...cfg, php_url: e.target.value })}
+                          placeholder="http://example.com/check.php"
+                          className={`${inputCls} ${invalid ? 'border-red-400 focus:ring-red-400' : ''}`} />
+                        {invalid && (
+                          <p className="text-xs text-red-500 mt-1">Nieprawidłowy URL — powinien zaczynać się od http:// lub https://</p>
+                        )}
+                      </>
+                    )
+                  })()}
+                </Field>
+                {devStatus && (devStatus.php_url_set || cfg.php_url.length > 0) && (
+                  <div className="flex items-center justify-between gap-3 py-1">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0
+                        ${devStatus.ignore_php ? 'bg-orange-100' : 'bg-blue-100'}`}>
+                        {devStatus.ignore_php
+                          ? <CloudOff size={18} className="text-orange-500" />
+                          : <Globe    size={18} className="text-blue-500" />}
+                      </div>
+                      <div>
+                        <p className="text-sm font-medium text-gray-800">Ignoruj skrypt</p>
+                        <p className="text-xs text-gray-400">
+                          {devStatus.ignore_php ? 'Wyłączony — decyzja manualna' : 'Aktywny — decyzja z internetu'}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        try {
+                          await apiSetIrrigation(undefined, !devStatus.ignore_php)
+                          toast.success(devStatus.ignore_php ? 'Skrypt włączony' : 'Skrypt wyłączony')
+                          apiGetStatus().then(r => setDevStatus(r.data)).catch(() => {})
+                        } catch { toast.error('Błąd') }
+                      }}
+                      className={`relative inline-flex w-12 h-6 rounded-full transition-colors shrink-0
+                        ${devStatus.ignore_php ? 'bg-orange-400' : 'bg-gray-300'}`}
+                    >
+                      <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow
+                        transition-transform ${devStatus.ignore_php ? 'translate-x-6' : ''}`} />
+                    </button>
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-gray-800">Ignoruj skrypt PHP</p>
-                    <p className="text-xs text-gray-400">
-                      {devStatus.ignore_php ? 'Wyłączony — decyzja manualna' : 'Aktywny — decyzja z internetu'}
-                    </p>
-                  </div>
-                </div>
-                <button
-                  onClick={async () => {
-                    try {
-                      await apiSetIrrigation(undefined, !devStatus.ignore_php)
-                      toast.success(devStatus.ignore_php ? 'PHP check włączony' : 'PHP check wyłączony')
-                      apiGetStatus().then(r => setDevStatus(r.data)).catch(() => {})
-                    } catch { toast.error('Błąd') }
-                  }}
-                  className={`relative inline-flex w-12 h-6 rounded-full transition-colors shrink-0
-                    ${devStatus.ignore_php ? 'bg-orange-400' : 'bg-gray-300'}`}
-                >
-                  <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow
-                    transition-transform ${devStatus.ignore_php ? 'translate-x-6' : ''}`} />
-                </button>
+                )}
               </div>
-            )}
-            <Field label="Serwer NTP">
-              <input value={cfg.ntp_server}
-                onChange={e => setCfg({ ...cfg, ntp_server: e.target.value })}
-                className={inputCls} />
-            </Field>
-            <Field label="Strefa czasowa (offset UTC, np. 2 dla CEST)">
-              <input type="number" min={-12} max={14} value={cfg.tz_offset}
-                onChange={e => setCfg({ ...cfg, tz_offset: +e.target.value })}
-                className={`${inputCls} w-24`} />
-            </Field>
+            </div>
+
+            <div className="border-t border-gray-100" />
+
+            {/* Czas / NTP */}
+            <div>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+                Synchronizacja czasu (NTP)
+              </p>
+              <div className="flex flex-col gap-3">
+                <Field label="Serwer NTP">
+                  <input value={cfg.ntp_server}
+                    onChange={e => setCfg({ ...cfg, ntp_server: e.target.value })}
+                    className={inputCls} />
+                </Field>
+                <Field label="Strefa czasowa (offset UTC, np. 2 dla CEST)">
+                  <input type="number" min={-12} max={14} value={cfg.tz_offset}
+                    onChange={e => setCfg({ ...cfg, tz_offset: +e.target.value })}
+                    className={`${inputCls} w-24`} />
+                </Field>
+              </div>
+            </div>
+
             <SaveButton saving={saving} onClick={save} />
           </div>
         )}

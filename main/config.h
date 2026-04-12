@@ -66,8 +66,8 @@
 #define WIFI_CONNECT_TIMEOUT_MS (30 * 1000)
 #define WIFI_MAX_RETRIES        3
 #define NTP_SYNC_INTERVAL_MS    (24 * 60 * 60 * 1000)
-#define DAILY_CHECK_HOUR        0
-#define DAILY_CHECK_MINUTE      5
+#define DAILY_CHECK_HOUR        22
+#define DAILY_CHECK_MINUTE      45
 
 #define API_TOKEN_LEN           32
 #define SCHEDULE_DURATION_MAX   (4 * 60 * 60)  // 4 godziny max

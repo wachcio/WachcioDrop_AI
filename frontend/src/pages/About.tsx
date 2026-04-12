@@ -15,6 +15,8 @@ interface DeviceInfo {
   sections: number
   groups_max: number
   schedule_max: number
+  daily_check_hour: number
+  daily_check_minute: number
 }
 
 function Row({ icon: Icon, label, value }: { icon: React.ElementType; label: string; value: string | number }) {
