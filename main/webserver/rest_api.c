@@ -543,14 +543,15 @@ static esp_err_t handle_time_get(httpd_req_t *req)
 {
     CHECK_AUTH(req);
 
-    struct tm t = {0};
-    rtc_get_time(&t);
+    time_t now = time(NULL);
+    struct tm t_local = {0};
+    localtime_r(&now, &t_local);
     char tstr[32];
-    strftime(tstr, sizeof(tstr), "%Y-%m-%dT%H:%M:%S", &t);
+    strftime(tstr, sizeof(tstr), "%Y-%m-%dT%H:%M:%S", &t_local);
 
     cJSON *root = cJSON_CreateObject();
     cJSON_AddStringToObject(root, "time",  tstr);
-    cJSON_AddNumberToObject(root, "unix",  (double)mktime(&t));
+    cJSON_AddNumberToObject(root, "unix",  (double)now);
     cJSON_AddNumberToObject(root, "tz",    g_config.timezone_offset);
     char *s = cJSON_PrintUnformatted(root);
     JSON_RESP(req, s);

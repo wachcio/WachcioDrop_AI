@@ -25,6 +25,18 @@ api.interceptors.request.use((config) => {
 })
 
 // Typy danych
+export interface SectionState {
+  id: number
+  active: boolean
+  remaining_sec: number | null
+  started_at: string | null
+}
+
+export interface SectionsResponse {
+  master: boolean
+  sections: SectionState[]
+}
+
 export interface SystemStatus {
   uptime_sec: number
   ip: string
@@ -33,15 +45,6 @@ export interface SystemStatus {
   master_active: boolean
   irrigation_today: boolean
   time: string
-}
-
-export interface SectionState {
-  id: number
-  active: boolean
-}
-
-export interface SectionsResponse {
-  master: boolean
   sections: SectionState[]
 }
 
@@ -96,3 +99,4 @@ export const apiSaveSettings = (s: Partial<Settings> & { wifi_pass?: string; mqt
 
 export const apiGetTime      = ()                => api.get('/api/time')
 export const apiSetTime      = (unix: number)    => api.post('/api/time', { unix })
+export const apiSetDateTime  = (datetime: string) => api.post('/api/time', { datetime })

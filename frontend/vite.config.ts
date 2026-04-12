@@ -1,8 +1,9 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [tailwindcss(), react()],
   base: '/',
   build: {
     outDir: '../spiffs_image',
@@ -21,7 +22,7 @@ export default defineConfig({
     // Proxy do ESP32 podczas developmentu
     proxy: {
       '/api': {
-        target: 'http://192.168.1.100',
+        target: 'http://192.168.20.230',
         changeOrigin: true,
       },
     },

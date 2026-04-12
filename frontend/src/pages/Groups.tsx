@@ -1,10 +1,152 @@
 import { useEffect, useState } from 'react'
+import toast from 'react-hot-toast'
+import { Play, Pencil, Save, X, Droplets } from 'lucide-react'
 import { apiGetGroups, apiSetGroup, apiActivateGroup, Group } from '../api/client'
 
-const CARD: React.CSSProperties = {
-  background: '#fff', borderRadius: '8px', padding: '16px',
-  boxShadow: '0 1px 4px rgba(0,0,0,.12)', marginBottom: '12px',
+const SECTIONS = [1, 2, 3, 4, 5, 6, 7, 8]
+
+function formatSec(s: number): string {
+  if (s < 60)   return `${s}s`
+  if (s < 3600) return `${s / 60}min`
+  return `${s / 3600}h`
 }
+
+// ─── GroupCard ────────────────────────────────────────────────────────────────
+
+function GroupCard({
+  group, duration, onEdit, onActivate,
+}: {
+  group: Group
+  duration: number
+  onEdit: (g: Group) => void
+  onActivate: (id: number) => void
+}) {
+  const sections = SECTIONS.filter(s => group.section_mask & (1 << (s - 1)))
+  const empty = sections.length === 0
+
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex flex-col gap-3">
+
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="w-7 h-7 bg-green-100 text-green-700 rounded-full text-xs
+            font-bold flex items-center justify-center shrink-0">
+            {group.id}
+          </span>
+          <span className="font-semibold text-gray-800">{group.name}</span>
+        </div>
+        <button
+          onClick={() => onEdit(group)}
+          className="text-gray-400 hover:text-green-600 transition-colors"
+        >
+          <Pencil size={16} />
+        </button>
+      </div>
+
+      {/* Sekcje */}
+      <div className="flex gap-1.5 flex-wrap min-h-6">
+        {sections.map(s => (
+          <span key={s}
+            className="flex items-center gap-1 bg-green-50 text-green-700 border border-green-200
+              rounded-lg px-2 py-0.5 text-xs font-medium">
+            <Droplets size={10} />
+            S{s}
+          </span>
+        ))}
+        {empty && <span className="text-xs text-gray-300 italic">Brak sekcji</span>}
+      </div>
+
+      {/* Activate */}
+      <button
+        onClick={() => onActivate(group.id)}
+        disabled={empty}
+        className={`flex items-center justify-center gap-2 rounded-xl py-2 text-sm font-medium
+          transition-colors ${empty
+            ? 'bg-gray-100 text-gray-300 cursor-not-allowed'
+            : 'bg-green-600 hover:bg-green-700 text-white shadow-sm'}`}
+      >
+        <Play size={15} />
+        Uruchom ({formatSec(duration)})
+      </button>
+    </div>
+  )
+}
+
+// ─── EditModal ─────────────────────────────────────────────────────────────────
+
+function EditModal({
+  group, onChange, onSave, onCancel, saving,
+}: {
+  group: Group
+  onChange: (g: Group) => void
+  onSave: () => void
+  onCancel: () => void
+  saving: boolean
+}) {
+  const set = (patch: Partial<Group>) => onChange({ ...group, ...patch })
+
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-end sm:items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-5 flex flex-col gap-4">
+
+        <h3 className="font-bold text-gray-800">Edytuj grupę #{group.id}</h3>
+
+        <div>
+          <label className="text-xs text-gray-500 block mb-1">Nazwa</label>
+          <input
+            value={group.name}
+            onChange={e => set({ name: e.target.value })}
+            maxLength={15}
+            className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm
+              focus:outline-none focus:ring-2 focus:ring-green-400"
+          />
+        </div>
+
+        <div>
+          <label className="text-xs text-gray-500 block mb-2">Sekcje w grupie</label>
+          <div className="grid grid-cols-4 gap-2">
+            {SECTIONS.map(s => {
+              const on = !!(group.section_mask & (1 << (s - 1)))
+              return (
+                <button
+                  key={s}
+                  onClick={() => set({ section_mask: group.section_mask ^ (1 << (s - 1)) })}
+                  className={`h-12 rounded-xl font-bold text-sm transition-colors
+                    ${on ? 'bg-green-500 text-white shadow-sm' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                >
+                  <Droplets size={12} className={`mx-auto mb-0.5 ${on ? 'text-white' : 'text-gray-400'}`} />
+                  S{s}
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        <div className="flex gap-2 pt-1">
+          <button
+            onClick={onSave}
+            disabled={saving}
+            className="flex-1 flex items-center justify-center gap-1.5 bg-green-600 hover:bg-green-700
+              text-white py-2.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
+          >
+            <Save size={15} />
+            {saving ? 'Zapisywanie…' : 'Zapisz'}
+          </button>
+          <button
+            onClick={onCancel}
+            className="flex items-center justify-center gap-1.5 bg-gray-100 hover:bg-gray-200
+              text-gray-600 px-4 py-2.5 rounded-xl text-sm font-medium transition-colors"
+          >
+            <X size={15} />
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Groups ────────────────────────────────────────────────────────────────────
 
 export default function Groups() {
   const [groups,   setGroups]  = useState<Group[]>([])
@@ -18,119 +160,73 @@ export default function Groups() {
   const save = async () => {
     if (!editing) return
     setSaving(true)
-    await apiSetGroup(editing.id, editing)
+    try {
+      await apiSetGroup(editing.id, editing)
+      toast.success('Grupa zapisana')
+      setEditing(null)
+      load()
+    } catch {
+      toast.error('Błąd zapisu')
+    }
     setSaving(false)
-    setEditing(null)
-    load()
   }
 
   const activate = async (id: number) => {
-    await apiActivateGroup(id, duration)
+    try {
+      await apiActivateGroup(id, duration)
+      toast.success(`Grupa ${id} uruchomiona (${formatSec(duration)})`)
+    } catch {
+      toast.error('Błąd uruchamiania grupy')
+    }
   }
 
-  return (
-    <div>
-      <h2 style={{ margin: '0 0 8px', color: '#1f5e1f' }}>Grupy sekcji</h2>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '16px' }}>
-        <span style={{ fontSize: '13px', color: '#555' }}>Czas aktywacji:</span>
-        <select value={duration} onChange={e => setDur(+e.target.value)}
-                style={{ padding: '5px', borderRadius: '4px', border: '1px solid #ccc' }}>
-          {[60,120,300,600,900,1800,3600].map(s => (
-            <option key={s} value={s}>{formatSec(s)}</option>
-          ))}
-        </select>
-      </div>
-
-      {groups.map(g => (
-        <div key={g.id} style={CARD}>
-          {editing?.id === g.id ? (
-            <GroupForm group={editing} onChange={setEditing}
-                       onSave={save} onCancel={() => setEditing(null)} saving={saving} />
-          ) : (
-            <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
-              <span style={{ fontWeight: 'bold', minWidth: '24px', color: '#888' }}>#{g.id}</span>
-              <span style={{ fontWeight: 'bold' }}>{g.name}</span>
-              <span style={{ fontSize: '12px', color: '#555' }}>
-                Sekcje: {[1,2,3,4,5,6,7,8]
-                  .filter(i => g.section_mask & (1<<(i-1)))
-                  .map(i => `S${i}`)
-                  .join(', ') || '—'}
-              </span>
-              <div style={{ marginLeft: 'auto', display: 'flex', gap: '8px' }}>
-                <button onClick={() => activate(g.id)}
-                        disabled={g.section_mask === 0}
-                        style={{ padding: '4px 12px', cursor: 'pointer', borderRadius: '4px',
-                                 background: '#2a7c2a', border: 'none', color: '#fff',
-                                 opacity: g.section_mask ? 1 : 0.4 }}>
-                  Uruchom
-                </button>
-                <button onClick={() => setEditing({...g})}
-                        style={{ padding: '4px 12px', cursor: 'pointer', borderRadius: '4px',
-                                 background: '#e8f4e8', border: '1px solid #2a7c2a', color: '#1f5e1f' }}>
-                  Edytuj
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function GroupForm({
-  group, onChange, onSave, onCancel, saving
-}: {
-  group: Group
-  onChange: (g: Group) => void
-  onSave: () => void
-  onCancel: () => void
-  saving: boolean
-}) {
-  const set = (patch: Partial<Group>) => onChange({ ...group, ...patch })
+  const DURATION_OPTS = [60, 120, 300, 600, 900, 1800, 3600]
 
   return (
-    <div>
-      <label style={{ display: 'block', marginBottom: '8px', fontSize: '12px', color: '#555' }}>
-        Nazwa grupy
-        <input value={group.name}
-               onChange={e => set({ name: e.target.value })}
-               style={{ display: 'block', padding: '6px', border: '1px solid #ccc',
-                        borderRadius: '4px', width: '200px', marginTop: '4px' }} />
-      </label>
+    <div className="flex flex-col gap-4">
 
-      <div style={{ marginBottom: '12px' }}>
-        <div style={{ fontSize: '12px', color: '#555', marginBottom: '4px' }}>Sekcje w grupie:</div>
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-          {[1,2,3,4,5,6,7,8].map(s => (
-            <label key={s} style={{ display: 'flex', alignItems: 'center', gap: '4px',
-                                     fontSize: '14px', cursor: 'pointer' }}>
-              <input type="checkbox" checked={!!(group.section_mask & (1<<(s-1)))}
-                     onChange={() => set({ section_mask: group.section_mask ^ (1<<(s-1)) })} />
-              Sekcja {s}
-            </label>
+      {/* Duration picker */}
+      <div className="flex items-center gap-3 bg-white rounded-2xl shadow-sm border border-gray-100 p-3">
+        <span className="text-sm text-gray-600 shrink-0">Czas aktywacji:</span>
+        <div className="flex gap-1.5 flex-wrap">
+          {DURATION_OPTS.map(s => (
+            <button
+              key={s}
+              onClick={() => setDur(s)}
+              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors
+                ${duration === s
+                  ? 'bg-green-600 text-white shadow-sm'
+                  : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+            >
+              {formatSec(s)}
+            </button>
           ))}
         </div>
       </div>
 
-      <div style={{ display: 'flex', gap: '8px' }}>
-        <button onClick={onSave} disabled={saving}
-                style={{ padding: '8px 20px', background: '#2a7c2a', color: '#fff',
-                         border: 'none', borderRadius: '4px', cursor: 'pointer' }}>
-          {saving ? 'Zapisywanie...' : 'Zapisz'}
-        </button>
-        <button onClick={onCancel}
-                style={{ padding: '8px 16px', background: '#eee', border: 'none',
-                         borderRadius: '4px', cursor: 'pointer' }}>
-          Anuluj
-        </button>
+      {/* Group grid */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {groups.map(g => (
+          <GroupCard
+            key={g.id}
+            group={g}
+            duration={duration}
+            onEdit={g => setEditing({ ...g })}
+            onActivate={activate}
+          />
+        ))}
       </div>
+
+      {/* Edit modal */}
+      {editing && (
+        <EditModal
+          group={editing}
+          onChange={setEditing}
+          onSave={save}
+          onCancel={() => setEditing(null)}
+          saving={saving}
+        />
+      )}
     </div>
   )
-}
-
-function formatSec(s: number): string {
-  if (s < 60)   return `${s}s`
-  if (s < 3600) return `${s/60}min`
-  return `${s/3600}h`
 }

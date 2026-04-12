@@ -126,17 +126,17 @@ void wifi_manager_task(void *arg)
     esp_wifi_start();
     ESP_LOGI(TAG, "AP started: SSID='%s' IP=%s", DEFAULT_AP_SSID, AP_IP_ADDR);
 
-    // Portal startuje raz i działa przez cały czas pracy urządzenia
-    captive_portal_start(file_server_get_handle(), cfg);
-    s_state = WIFI_STATE_AP_MODE;
-
-    // Jeśli mamy zapisane poświadczenia — próbuj STA od razu
-    // Krótkie opóźnienie żeby WiFi stack zdążył uruchomić STA interface
-    if (cfg->wifi_ssid[0] != '\0') {
-        vTaskDelay(pdMS_TO_TICKS(200));
+    // Portal startuje tylko gdy brak zapisanego SSID
+    if (cfg->wifi_ssid[0] == '\0') {
+        captive_portal_start(file_server_get_handle(), cfg);
+        s_state = WIFI_STATE_AP_MODE;
+    } else {
+        // Mamy poświadczenia — pomiń portal, serwuj React app
+        file_server_register(file_server_get_handle());
         s_state   = WIFI_STATE_CONNECTING;
         s_retries = 0;
         xEventGroupClearBits(s_wifi_event_group, WIFI_CONNECTED_BIT | WIFI_FAIL_BIT);
+        vTaskDelay(pdMS_TO_TICKS(200));
         start_sta(cfg->wifi_ssid, cfg->wifi_pass);
     }
 
@@ -162,9 +162,11 @@ void wifi_manager_task(void *arg)
             }
         }
 
-        // Nowa konfiguracja z portalu — (re)połącz STA
+        // Nowa konfiguracja z portalu — przełącz na file server i połącz STA
         if (cfg->wifi_ssid[0] != '\0' && captive_portal_config_received()) {
             captive_portal_reset_flag();
+            captive_portal_stop(file_server_get_handle());
+            file_server_register(file_server_get_handle());
             ESP_LOGI(TAG, "new WiFi config, connecting STA to '%s'", cfg->wifi_ssid);
             s_state   = WIFI_STATE_CONNECTING;
             s_retries = 0;

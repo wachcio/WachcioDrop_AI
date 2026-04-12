@@ -1,37 +1,73 @@
 import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom'
-import Dashboard  from './pages/Dashboard'
-import Schedule   from './pages/Schedule'
-import Groups     from './pages/Groups'
-import Settings   from './pages/Settings'
+import { Toaster } from 'react-hot-toast'
+import { LayoutDashboard, CalendarDays, Layers, Settings } from 'lucide-react'
+import Dashboard from './pages/Dashboard'
+import Schedule  from './pages/Schedule'
+import Groups    from './pages/Groups'
+import SettingsPage from './pages/Settings'
 
-const NAV_STYLE: React.CSSProperties = {
-  display: 'flex', gap: '2px', background: '#1f5e1f', padding: '8px 12px',
-}
-const LINK_STYLE: React.CSSProperties = {
-  color: '#cce5cc', textDecoration: 'none', padding: '6px 14px',
-  borderRadius: '4px', fontSize: '14px',
-}
-const ACTIVE_STYLE: React.CSSProperties = {
-  ...LINK_STYLE, background: '#2a7c2a', color: '#fff', fontWeight: 'bold',
-}
+const NAV_ITEMS = [
+  { to: '/',         icon: LayoutDashboard, label: 'Dashboard' },
+  { to: '/schedule', icon: CalendarDays,    label: 'Harmonogram' },
+  { to: '/groups',   icon: Layers,          label: 'Grupy' },
+  { to: '/settings', icon: Settings,        label: 'Ustawienia' },
+]
 
 export default function App() {
   return (
     <BrowserRouter>
-      <nav style={NAV_STYLE}>
-        <NavLink to="/"         style={({ isActive }) => isActive ? ACTIVE_STYLE : LINK_STYLE}>Dashboard</NavLink>
-        <NavLink to="/schedule" style={({ isActive }) => isActive ? ACTIVE_STYLE : LINK_STYLE}>Harmonogram</NavLink>
-        <NavLink to="/groups"   style={({ isActive }) => isActive ? ACTIVE_STYLE : LINK_STYLE}>Grupy</NavLink>
-        <NavLink to="/settings" style={({ isActive }) => isActive ? ACTIVE_STYLE : LINK_STYLE}>Ustawienia</NavLink>
-      </nav>
-      <main style={{ maxWidth: '900px', margin: '0 auto', padding: '16px' }}>
-        <Routes>
-          <Route path="/"         element={<Dashboard />} />
-          <Route path="/schedule" element={<Schedule />} />
-          <Route path="/groups"   element={<Groups />} />
-          <Route path="/settings" element={<Settings />} />
-        </Routes>
-      </main>
+      <div className="min-h-screen bg-gray-50 flex flex-col">
+
+        {/* Header */}
+        <header className="bg-green-800 text-white px-4 py-3 flex items-center gap-3 shadow-md">
+          <span className="text-2xl">💧</span>
+          <div>
+            <h1 className="text-lg font-bold leading-none">WachcioDrop</h1>
+            <p className="text-green-300 text-xs">Sterownik nawadniania</p>
+          </div>
+        </header>
+
+        {/* Tab navigation */}
+        <nav className="bg-white border-b border-gray-200 shadow-sm">
+          <div className="flex max-w-3xl mx-auto">
+            {NAV_ITEMS.map(({ to, icon: Icon, label }) => (
+              <NavLink
+                key={to}
+                to={to}
+                end={to === '/'}
+                className={({ isActive }) =>
+                  `flex-1 flex flex-col items-center gap-0.5 py-2.5 text-xs font-medium transition-colors ` +
+                  (isActive
+                    ? 'text-green-700 border-b-2 border-green-700'
+                    : 'text-gray-500 hover:text-green-600')
+                }
+              >
+                <Icon size={20} />
+                <span className="hidden sm:block">{label}</span>
+              </NavLink>
+            ))}
+          </div>
+        </nav>
+
+        {/* Content */}
+        <main className="flex-1 max-w-3xl mx-auto w-full px-4 py-5">
+          <Routes>
+            <Route path="/"         element={<Dashboard />} />
+            <Route path="/schedule" element={<Schedule />} />
+            <Route path="/groups"   element={<Groups />} />
+            <Route path="/settings" element={<SettingsPage />} />
+          </Routes>
+        </main>
+
+      </div>
+      <Toaster
+        position="bottom-center"
+        toastOptions={{
+          style: { borderRadius: '10px', background: '#1a1a1a', color: '#fff' },
+          success: { iconTheme: { primary: '#22c55e', secondary: '#fff' } },
+          error:   { iconTheme: { primary: '#ef4444', secondary: '#fff' } },
+        }}
+      />
     </BrowserRouter>
   )
 }
