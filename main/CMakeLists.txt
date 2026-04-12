@@ -38,4 +38,5 @@ idf_component_register(
         i2cdev
         ds3231
         ssd1306
+        esp_psram
 )

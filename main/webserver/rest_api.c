@@ -18,6 +18,9 @@
 #include "cJSON.h"
 #include "esp_log.h"
 #include "esp_ota_ops.h"
+#include "esp_app_desc.h"
+#include "esp_psram.h"
+#include "esp_system.h"
 #include <string.h>
 #include <stdlib.h>
 #include <time.h>
@@ -76,6 +79,36 @@ bool rest_auth_check(httpd_req_t *req)
 
 // --------------------------------------------------------------------------
 // GET /api/status
+// --------------------------------------------------------------------------
+// GET /api/info
+// --------------------------------------------------------------------------
+static esp_err_t handle_info(httpd_req_t *req)
+{
+    CHECK_AUTH(req);
+
+    const esp_app_desc_t *app = esp_app_get_description();
+
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddStringToObject(root, "fw_version",  FW_VERSION);
+    cJSON_AddStringToObject(root, "author",       FW_AUTHOR);
+    cJSON_AddStringToObject(root, "idf_version",  IDF_VER);
+    cJSON_AddStringToObject(root, "app_name",     app->project_name);
+    cJSON_AddStringToObject(root, "build_date",   app->date);
+    cJSON_AddStringToObject(root, "build_time",   app->time);
+    cJSON_AddNumberToObject(root, "flash_mb",     CONFIG_ESPTOOLPY_FLASHSIZE_16MB ? 16 : 4);
+    cJSON_AddNumberToObject(root, "psram_kb",     esp_psram_get_size() / 1024);
+    cJSON_AddNumberToObject(root, "heap_free",    esp_get_free_heap_size());
+    cJSON_AddNumberToObject(root, "sections",     SECTIONS_COUNT);
+    cJSON_AddNumberToObject(root, "groups_max",   GROUPS_MAX);
+    cJSON_AddNumberToObject(root, "schedule_max", SCHEDULE_ENTRIES);
+
+    char *s = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    JSON_RESP(req, s);
+    free(s);
+    return ESP_OK;
+}
+
 // --------------------------------------------------------------------------
 static esp_err_t handle_status(httpd_req_t *req)
 {
@@ -982,6 +1015,7 @@ esp_err_t rest_api_register(httpd_handle_t server)
     httpd_register_uri_handler(server, &_u); \
 } while(0)
 
+    REG("/api/info",                   HTTP_GET,    handle_info);
     REG("/api/status",                 HTTP_GET,    handle_status);
     REG("/api/irrigation",             HTTP_POST,   handle_irrigation_post);
 

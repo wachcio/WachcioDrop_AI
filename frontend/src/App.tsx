@@ -1,16 +1,18 @@
 import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
-import { LayoutDashboard, CalendarDays, Layers, Settings } from 'lucide-react'
+import { LayoutDashboard, CalendarDays, Layers, Settings, Info } from 'lucide-react'
 import Dashboard from './pages/Dashboard'
 import Schedule  from './pages/Schedule'
 import Groups    from './pages/Groups'
 import SettingsPage from './pages/Settings'
+import About    from './pages/About'
 
 const NAV_ITEMS = [
   { to: '/',         icon: LayoutDashboard, label: 'Dashboard' },
   { to: '/schedule', icon: CalendarDays,    label: 'Harmonogram' },
   { to: '/groups',   icon: Layers,          label: 'Grupy' },
   { to: '/settings', icon: Settings,        label: 'Ustawienia' },
+  { to: '/about',    icon: Info,            label: 'O aplikacji' },
 ]
 
 export default function App() {
@@ -56,6 +58,7 @@ export default function App() {
             <Route path="/schedule" element={<Schedule />} />
             <Route path="/groups"   element={<Groups />} />
             <Route path="/settings" element={<SettingsPage />} />
+            <Route path="/about"    element={<About />} />
           </Routes>
         </main>
 
