@@ -174,43 +174,65 @@ function GroupCard({
 // ─── DurationSlider ───────────────────────────────────────────────────────────
 
 function DurationSlider({ value, onChange }: { value: number; onChange: (v: number) => void }) {
+  const MAX = 5400  // 1.5h
   const marks = [
     { v: 60,   l: '1 min' },
     { v: 300,  l: '5 min' },
     { v: 900,  l: '15 min' },
     { v: 1800, l: '30 min' },
     { v: 3600, l: '1h' },
-    { v: 7200, l: '2h' },
+    { v: 5400, l: '1.5h' },
   ]
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
       <div className="flex items-center justify-between mb-3">
         <span className="text-sm font-medium text-gray-700">Czas trwania</span>
-        <span className="text-lg font-bold text-green-700">{formatDuration(value)}</span>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => onChange(Math.max(60, value - 60))}
+            className="w-7 h-7 rounded-lg bg-gray-100 hover:bg-gray-200 active:scale-90
+              flex items-center justify-center text-gray-600 font-bold text-lg leading-none
+              transition-all select-none"
+          >−</button>
+          <span className="text-lg font-bold text-green-700 w-20 text-center whitespace-nowrap">
+            {formatDuration(value)}
+          </span>
+          <button
+            onClick={() => onChange(Math.min(MAX, value + 60))}
+            className="w-7 h-7 rounded-lg bg-gray-100 hover:bg-gray-200 active:scale-90
+              flex items-center justify-center text-gray-600 font-bold text-lg leading-none
+              transition-all select-none"
+          >+</button>
+        </div>
       </div>
 
       <input
         type="range"
         min={60}
-        max={7200}
+        max={MAX}
         step={60}
         value={value}
         onChange={e => onChange(+e.target.value)}
         className="w-full accent-green-600 cursor-pointer"
       />
 
-      <div className="flex justify-between mt-1">
-        {marks.map(m => (
-          <button
-            key={m.v}
-            onClick={() => onChange(m.v)}
-            className={`text-xs px-1 py-0.5 rounded transition-colors
-              ${value === m.v ? 'text-green-700 font-bold' : 'text-gray-400 hover:text-green-600'}`}
-          >
-            {m.l}
-          </button>
-        ))}
+      <div className="relative mt-1 h-5">
+        {marks.map(m => {
+          const pct = (m.v - 60) / (MAX - 60) * 100
+          const transform = pct < 5 ? 'none' : pct > 95 ? 'translateX(-100%)' : 'translateX(-50%)'
+          return (
+            <button
+              key={m.v}
+              onClick={() => onChange(m.v)}
+              style={{ left: `${pct}%`, transform }}
+              className={`absolute text-xs px-1 py-0.5 rounded transition-colors whitespace-nowrap
+                ${value === m.v ? 'text-green-700 font-bold' : 'text-gray-400 hover:text-green-600'}`}
+            >
+              {m.l}
+            </button>
+          )
+        })}
       </div>
     </div>
   )
@@ -236,7 +258,7 @@ export default function Dashboard() {
       if (e?.response?.status === 401) {
         setErrMsg('Brak autoryzacji — ustaw token w Ustawieniach → Token')
       } else {
-        setErrMsg('Brak połączenia z ESP32')
+        setErrMsg('Brak połączenia z WachcioDrop')
       }
     }
   }
@@ -278,7 +300,7 @@ export default function Dashboard() {
       }
       load()
     } catch {
-      toast.error('Błąd komunikacji z ESP32')
+      toast.error('Błąd komunikacji z WachcioDrop')
     }
   }
 
@@ -288,7 +310,7 @@ export default function Dashboard() {
       toast.success('Wszystkie sekcje wyłączone')
       load()
     } catch {
-      toast.error('Błąd komunikacji z ESP32')
+      toast.error('Błąd komunikacji z WachcioDrop')
     }
   }
 
@@ -304,7 +326,7 @@ export default function Dashboard() {
       }
       load()
     } catch {
-      toast.error('Błąd komunikacji z ESP32')
+      toast.error('Błąd komunikacji z WachcioDrop')
     }
   }
 
@@ -313,7 +335,7 @@ export default function Dashboard() {
       <div className="flex items-center justify-center h-48 text-gray-400">
         <div className="text-center">
           <Droplets size={40} className="mx-auto mb-2 opacity-30 animate-bounce" />
-          <p className="text-sm">Łączenie z ESP32…</p>
+          <p className="text-sm">Łączenie z WachcioDrop…</p>
         </div>
       </div>
     )
