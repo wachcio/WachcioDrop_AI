@@ -1,16 +1,23 @@
 import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
-import { KeyRound, Wifi, Radio, Globe, Clock, Save, RefreshCw } from 'lucide-react'
-import { apiGetSettings, apiSaveSettings, apiGetTime, apiSetDateTime, Settings, setToken } from '../api/client'
+import { KeyRound, Wifi, Radio, Globe, Clock, Save, RefreshCw, SlidersHorizontal, Droplets, CloudOff } from 'lucide-react'
+import { apiGetSettings, apiSaveSettings, apiGetTime, apiSetDateTime, apiGetStatus, apiSetIrrigation, Settings, setToken, SystemStatus } from '../api/client'
 
-type Tab = 'token' | 'wifi' | 'mqtt' | 'uslugi' | 'czas'
+export type ScheduleMode = 'sections' | 'groups'
+export const SCHEDULE_MODE_KEY = 'schedule_mode'
+export function getScheduleMode(): ScheduleMode {
+  return (localStorage.getItem(SCHEDULE_MODE_KEY) as ScheduleMode) ?? 'sections'
+}
+
+type Tab = 'glowne' | 'token' | 'wifi' | 'mqtt' | 'uslugi' | 'czas'
 
 const TABS: { id: Tab; icon: typeof KeyRound; label: string }[] = [
-  { id: 'token',  icon: KeyRound, label: 'Token'  },
-  { id: 'wifi',   icon: Wifi,     label: 'WiFi'   },
-  { id: 'mqtt',   icon: Radio,    label: 'MQTT'   },
-  { id: 'uslugi', icon: Globe,    label: 'Usługi' },
-  { id: 'czas',   icon: Clock,    label: 'Czas'   },
+  { id: 'glowne', icon: SlidersHorizontal, label: 'Główne' },
+  { id: 'token',  icon: KeyRound,          label: 'Token'  },
+  { id: 'wifi',   icon: Wifi,              label: 'WiFi'   },
+  { id: 'mqtt',   icon: Radio,             label: 'MQTT'   },
+  { id: 'uslugi', icon: Globe,             label: 'Usługi' },
+  { id: 'czas',   icon: Clock,             label: 'Czas'   },
 ]
 
 function Field({
@@ -30,8 +37,59 @@ function Field({
 const inputCls = `w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm
   focus:outline-none focus:ring-2 focus:ring-green-400 bg-white`
 
+function ScheduleModeConfirm({
+  current, onConfirm, onCancel,
+}: {
+  current: ScheduleMode
+  onConfirm: () => void
+  onCancel: () => void
+}) {
+  const next = current === 'sections' ? 'grupy' : 'sekcje'
+  const prev = current === 'sections' ? 'sekcje' : 'grupy'
+  return (
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-5 flex flex-col gap-4">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-xl bg-yellow-100 flex items-center justify-center shrink-0">
+            <span className="text-xl">⚠️</span>
+          </div>
+          <div>
+            <h3 className="font-bold text-gray-800">Zmiana trybu harmonogramu</h3>
+            <p className="text-sm text-gray-600 mt-1">
+              Przełączasz harmonogram z <strong>{prev}</strong> na <strong>{next}</strong>.
+            </p>
+            <p className="text-sm text-gray-500 mt-2">
+              Sprawdź wpisy w harmonogramie — ustawione {prev} mogą nie pokrywać się
+              z {next === 'grupy' ? 'skonfigurowanymi grupami' : 'wybranymi sekcjami'}.
+            </p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={onConfirm}
+            className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2.5
+              rounded-xl text-sm font-medium transition-colors"
+          >
+            Zmień tryb
+          </button>
+          <button
+            onClick={onCancel}
+            className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 py-2.5
+              rounded-xl text-sm font-medium transition-colors"
+          >
+            Anuluj
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function SettingsPage() {
-  const [tab, setTab] = useState<Tab>('token')
+  const [tab, setTab] = useState<Tab>('glowne')
+  const [scheduleMode, setScheduleMode] = useState<ScheduleMode>(getScheduleMode())
+  const [pendingMode, setPendingMode]   = useState<ScheduleMode | null>(null)
+  const [devStatus, setDevStatus]       = useState<SystemStatus | null>(null)
   const [cfg, setCfg] = useState<Settings>({
     wifi_ssid: '', mqtt_uri: '', mqtt_user: '', php_url: '',
     ntp_server: 'pool.ntp.org', tz_offset: 2,
@@ -46,6 +104,7 @@ export default function SettingsPage() {
   useEffect(() => {
     apiGetSettings().then(r => setCfg(r.data)).catch(() => {})
     apiGetTime().then(r => setRtcTime(r.data.time.replace('T', ' '))).catch(() => {})
+    apiGetStatus().then(r => setDevStatus(r.data)).catch(() => {})
   }, [])
 
   // Lokalny tick co 1s — inkrementuje czas bez odpytywania API
@@ -124,6 +183,75 @@ export default function SettingsPage() {
       {/* Content */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
 
+        {tab === 'glowne' && (
+          <div className="flex flex-col gap-5">
+
+            {/* Nawadnianie dziś */}
+            {devStatus && (
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0
+                    ${devStatus.irrigation_today ? 'bg-green-100' : 'bg-red-100'}`}>
+                    <Droplets size={18} className={devStatus.irrigation_today ? 'text-green-600' : 'text-red-500'} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-800">Nawadnianie dziś</p>
+                    <p className="text-xs text-gray-400">
+                      {devStatus.irrigation_today ? 'Aktywne — harmonogram będzie wykonany' : 'Zablokowane — harmonogram pominięty'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={async () => {
+                    try {
+                      await apiSetIrrigation(!devStatus.irrigation_today, undefined)
+                      toast.success(devStatus.irrigation_today ? 'Nawadnianie zablokowane' : 'Nawadnianie aktywowane')
+                      apiGetStatus().then(r => setDevStatus(r.data)).catch(() => {})
+                    } catch { toast.error('Błąd') }
+                  }}
+                  className={`relative inline-flex w-12 h-6 rounded-full transition-colors shrink-0
+                    ${devStatus.irrigation_today ? 'bg-green-500' : 'bg-gray-300'}`}
+                >
+                  <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow
+                    transition-transform ${devStatus.irrigation_today ? 'translate-x-6' : ''}`} />
+                </button>
+              </div>
+            )}
+
+            <div className="border-t border-gray-100" />
+
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-medium text-gray-800">Tryb harmonogramu</p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {scheduleMode === 'sections'
+                    ? 'Harmonogram pozwala wybierać sekcje'
+                    : 'Harmonogram pozwala wybierać grupy'}
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className={`text-xs font-medium ${scheduleMode === 'sections' ? 'text-green-700' : 'text-gray-400'}`}>
+                  Sekcje
+                </span>
+                <button
+                  onClick={() => {
+                    const next: ScheduleMode = scheduleMode === 'sections' ? 'groups' : 'sections'
+                    setPendingMode(next)
+                  }}
+                  className={`relative inline-flex w-12 h-6 rounded-full transition-colors shrink-0
+                    ${scheduleMode === 'groups' ? 'bg-blue-500' : 'bg-green-500'}`}
+                >
+                  <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow
+                    transition-transform ${scheduleMode === 'groups' ? 'translate-x-6' : ''}`} />
+                </button>
+                <span className={`text-xs font-medium ${scheduleMode === 'groups' ? 'text-blue-600' : 'text-gray-400'}`}>
+                  Grupy
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
         {tab === 'token' && (
           <div className="flex flex-col gap-4">
             <p className="text-sm text-gray-600">
@@ -195,6 +323,38 @@ export default function SettingsPage() {
                 placeholder="http://example.com/check.php"
                 className={inputCls} />
             </Field>
+            {devStatus && devStatus.php_url_set && (
+              <div className="flex items-center justify-between gap-3 py-1">
+                <div className="flex items-center gap-3">
+                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0
+                    ${devStatus.ignore_php ? 'bg-orange-100' : 'bg-blue-100'}`}>
+                    {devStatus.ignore_php
+                      ? <CloudOff size={18} className="text-orange-500" />
+                      : <Globe    size={18} className="text-blue-500" />}
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-800">Ignoruj skrypt PHP</p>
+                    <p className="text-xs text-gray-400">
+                      {devStatus.ignore_php ? 'Wyłączony — decyzja manualna' : 'Aktywny — decyzja z internetu'}
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={async () => {
+                    try {
+                      await apiSetIrrigation(undefined, !devStatus.ignore_php)
+                      toast.success(devStatus.ignore_php ? 'PHP check włączony' : 'PHP check wyłączony')
+                      apiGetStatus().then(r => setDevStatus(r.data)).catch(() => {})
+                    } catch { toast.error('Błąd') }
+                  }}
+                  className={`relative inline-flex w-12 h-6 rounded-full transition-colors shrink-0
+                    ${devStatus.ignore_php ? 'bg-orange-400' : 'bg-gray-300'}`}
+                >
+                  <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow
+                    transition-transform ${devStatus.ignore_php ? 'translate-x-6' : ''}`} />
+                </button>
+              </div>
+            )}
             <Field label="Serwer NTP">
               <input value={cfg.ntp_server}
                 onChange={e => setCfg({ ...cfg, ntp_server: e.target.value })}
@@ -232,6 +392,19 @@ export default function SettingsPage() {
         )}
 
       </div>
+
+      {pendingMode && (
+        <ScheduleModeConfirm
+          current={scheduleMode}
+          onConfirm={() => {
+            setScheduleMode(pendingMode)
+            localStorage.setItem(SCHEDULE_MODE_KEY, pendingMode)
+            setPendingMode(null)
+            toast.success(`Tryb harmonogramu: ${pendingMode === 'groups' ? 'grupy' : 'sekcje'}`)
+          }}
+          onCancel={() => setPendingMode(null)}
+        />
+      )}
     </div>
   )
 }

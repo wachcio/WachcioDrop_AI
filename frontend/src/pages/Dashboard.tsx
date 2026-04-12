@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
-import { Wifi, Clock, Thermometer, Power, Droplets, WifiOff, KeyRound, Globe, CloudOff, Layers } from 'lucide-react'
+import { Wifi, Clock, Thermometer, Power, Droplets, WifiOff, KeyRound, Layers } from 'lucide-react'
 import {
-  apiGetStatus, apiSectionOn, apiSectionOff, apiAllOff, apiSetIrrigation, apiActivateGroup,
+  apiGetStatus, apiSectionOn, apiSectionOff, apiAllOff, apiActivateGroup,
   SystemStatus, SectionState, GroupStatus
 } from '../api/client'
 
@@ -34,21 +34,6 @@ function rssiStrength(rssi: number): { bars: number; label: string; color: strin
   if (rssi >= -65) return { bars: 3, label: 'Dobry',     color: 'text-green-400' }
   if (rssi >= -75) return { bars: 2, label: 'Słaby',     color: 'text-yellow-400' }
   return             { bars: 1, label: 'Bardzo słaby', color: 'text-red-400' }
-}
-
-// ─── ToggleSwitch ─────────────────────────────────────────────────────────────
-
-function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <button
-      onClick={() => onChange(!checked)}
-      className={`relative inline-flex w-12 h-6 rounded-full transition-colors shrink-0
-        ${checked ? 'bg-green-500' : 'bg-gray-300'}`}
-    >
-      <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow
-        transition-transform ${checked ? 'translate-x-6' : ''}`} />
-    </button>
-  )
 }
 
 // ─── RssiIcon ─────────────────────────────────────────────────────────────────
@@ -461,68 +446,6 @@ export default function Dashboard() {
 
       {/* Slider czasu */}
       <DurationSlider value={duration} onChange={setDuration} />
-
-      {/* Sterowanie nawadnianiem */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex flex-col gap-3">
-        <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Sterowanie</h2>
-
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0
-              ${status.irrigation_today ? 'bg-green-100' : 'bg-red-100'}`}>
-              <Droplets size={18} className={status.irrigation_today ? 'text-green-600' : 'text-red-500'} />
-            </div>
-            <div>
-              <p className="text-sm font-medium text-gray-800">Nawadnianie dziś</p>
-              <p className="text-xs text-gray-400">
-                {status.irrigation_today ? 'Aktywne — harmonogram będzie wykonany' : 'Zablokowane — harmonogram pominięty'}
-              </p>
-            </div>
-          </div>
-          <ToggleSwitch
-            checked={status.irrigation_today}
-            onChange={async (v) => {
-              try {
-                await apiSetIrrigation(v, undefined)
-                toast.success(v ? 'Nawadnianie aktywowane' : 'Nawadnianie zablokowane')
-                load()
-              } catch { toast.error('Błąd') }
-            }}
-          />
-        </div>
-
-        {status.php_url_set && (
-          <>
-            <div className="border-t border-gray-50" />
-            <div className="flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3">
-                <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0
-                  ${status.ignore_php ? 'bg-orange-100' : 'bg-blue-100'}`}>
-                  {status.ignore_php
-                    ? <CloudOff size={18} className="text-orange-500" />
-                    : <Globe    size={18} className="text-blue-500" />}
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-800">Skrypt PHP</p>
-                  <p className="text-xs text-gray-400">
-                    {status.ignore_php ? 'Ignorowany — decyzja manualna' : 'Aktywny — decyzja z internetu'}
-                  </p>
-                </div>
-              </div>
-              <ToggleSwitch
-                checked={status.ignore_php}
-                onChange={async (v) => {
-                  try {
-                    await apiSetIrrigation(undefined, v)
-                    toast.success(v ? 'PHP check wyłączony' : 'PHP check włączony')
-                    load()
-                  } catch { toast.error('Błąd') }
-                }}
-              />
-            </div>
-          </>
-        )}
-      </div>
 
     </div>
   )

@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
 import { ChevronDown, ChevronUp, Trash2, Save, X } from 'lucide-react'
-import { apiGetSchedule, apiSetSchedule, apiDelSchedule, ScheduleEntry } from '../api/client'
+import { apiGetSchedule, apiSetSchedule, apiDelSchedule, apiGetGroups, ScheduleEntry, Group } from '../api/client'
+import { getScheduleMode } from './Settings'
 
 const DAYS = ['Pon', 'Wt', 'Śr', 'Czw', 'Pt', 'Sob', 'Nie']
 const SECTIONS = [1, 2, 3, 4, 5, 6, 7, 8]
@@ -51,13 +52,15 @@ function DayPills({ mask }: { mask: number }) {
 // ─── EditForm ─────────────────────────────────────────────────────────────────
 
 function EditForm({
-  entry, onChange, onSave, onCancel, saving,
+  entry, onChange, onSave, onCancel, saving, groups, mode,
 }: {
   entry: ScheduleEntry
   onChange: (e: ScheduleEntry) => void
   onSave: () => void
   onCancel: () => void
   saving: boolean
+  groups: Group[]
+  mode: 'sections' | 'groups'
 }) {
   const set = (patch: Partial<ScheduleEntry>) => onChange({ ...entry, ...patch })
 
@@ -81,9 +84,9 @@ function EditForm({
               focus:outline-none focus:ring-2 focus:ring-green-400" />
         </div>
         <div>
-          <label className="text-xs text-gray-500 block mb-1">Czas [s]</label>
-          <input type="number" min={0} max={14400} value={entry.duration_sec}
-            onChange={e => set({ duration_sec: +e.target.value })}
+          <label className="text-xs text-gray-500 block mb-1">Czas [min]</label>
+          <input type="number" min={0} max={240} value={Math.round(entry.duration_sec / 60)}
+            onChange={e => set({ duration_sec: +e.target.value * 60 })}
             className="w-24 border border-gray-200 rounded-lg px-2 py-1.5 text-center text-sm
               focus:outline-none focus:ring-2 focus:ring-green-400" />
         </div>
@@ -109,25 +112,49 @@ function EditForm({
         </div>
       </div>
 
-      {/* Sekcje */}
-      <div>
-        <label className="text-xs text-gray-500 block mb-2">Sekcje</label>
-        <div className="flex gap-1.5 flex-wrap">
-          {SECTIONS.map(s => {
-            const on = !!(entry.section_mask & (1 << (s - 1)))
-            return (
-              <button
-                key={s}
-                onClick={() => set({ section_mask: entry.section_mask ^ (1 << (s - 1)) })}
-                className={`w-10 h-10 rounded-xl text-sm font-bold transition-colors
-                  ${on ? 'bg-green-500 text-white shadow-sm' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
-              >
-                {s}
-              </button>
-            )
-          })}
+      {/* Sekcje lub Grupy */}
+      {mode === 'sections' ? (
+        <div>
+          <label className="text-xs text-gray-500 block mb-2">Sekcje</label>
+          <div className="flex gap-1.5 flex-wrap">
+            {SECTIONS.map(s => {
+              const on = !!(entry.section_mask & (1 << (s - 1)))
+              return (
+                <button
+                  key={s}
+                  onClick={() => set({ section_mask: entry.section_mask ^ (1 << (s - 1)) })}
+                  className={`w-10 h-10 rounded-xl text-sm font-bold transition-colors
+                    ${on ? 'bg-green-500 text-white shadow-sm' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                >
+                  {s}
+                </button>
+              )
+            })}
+          </div>
         </div>
-      </div>
+      ) : (
+        <div>
+          <label className="text-xs text-gray-500 block mb-2">Grupy</label>
+          <div className="flex gap-1.5 flex-wrap">
+            {groups.filter(g => g.section_mask !== 0).map(g => {
+              const on = !!(entry.group_mask & (1 << (g.id - 1)))
+              return (
+                <button
+                  key={g.id}
+                  onClick={() => set({ group_mask: on ? 0 : (1 << (g.id - 1)) })}
+                  className={`px-3 py-2 rounded-xl text-xs font-semibold transition-colors
+                    ${on ? 'bg-blue-500 text-white shadow-sm' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                >
+                  {g.name}
+                </button>
+              )
+            })}
+            {groups.filter(g => g.section_mask !== 0).length === 0 && (
+              <p className="text-xs text-gray-400 italic">Brak skonfigurowanych grup</p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Przyciski */}
       <div className="flex gap-2">
@@ -156,13 +183,26 @@ function EditForm({
 // ─── Schedule ─────────────────────────────────────────────────────────────────
 
 export default function Schedule() {
-  const [entries, setEntries] = useState<ScheduleEntry[]>([])
-  const [editing, setEditing] = useState<ScheduleEntry | null>(null)
+  const [entries,  setEntries]  = useState<ScheduleEntry[]>([])
+  const [groups,   setGroups]   = useState<Group[]>([])
+  const [editing,  setEditing]  = useState<ScheduleEntry | null>(null)
   const [expanded, setExpanded] = useState<number | null>(null)
-  const [saving, setSaving]   = useState(false)
+  const [saving,   setSaving]   = useState(false)
+  const [mode,     setMode]     = useState(getScheduleMode())
 
   const load = () => apiGetSchedule().then(r => setEntries(r.data))
-  useEffect(() => { load() }, [])
+
+  useEffect(() => {
+    load()
+    apiGetGroups().then(r => setGroups(r.data)).catch(() => {})
+  }, [])
+
+  // Odśwież tryb gdy zakładka staje się widoczna (user mógł zmienić w Ustawieniach)
+  useEffect(() => {
+    const onFocus = () => setMode(getScheduleMode())
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [])
 
   const toggleEnabled = async (e: ScheduleEntry) => {
     try {
@@ -218,6 +258,7 @@ export default function Schedule() {
       {entries.map(e => {
         const isOpen = expanded === e.id
         const activeSections = SECTIONS.filter(s => e.section_mask & (1 << (s - 1)))
+        const activeGroups = groups.filter(g => e.group_mask & (1 << (g.id - 1)))
 
         return (
           <div
@@ -252,17 +293,27 @@ export default function Schedule() {
                 {formatDur(e.duration_sec)}
               </span>
 
-              {/* Active sections */}
-              <div className="hidden sm:flex gap-1">
-                {activeSections.map(s => (
-                  <span key={s}
-                    className="w-5 h-5 bg-green-100 text-green-700 rounded text-xs
-                      font-bold flex items-center justify-center">
-                    {s}
-                  </span>
-                ))}
-                {activeSections.length === 0 && (
-                  <span className="text-xs text-gray-300">brak</span>
+              {/* Active sections / groups */}
+              <div className="hidden sm:flex gap-1 flex-wrap">
+                {mode === 'sections' ? (
+                  activeSections.length > 0
+                    ? activeSections.map(s => (
+                        <span key={s}
+                          className="w-5 h-5 bg-green-100 text-green-700 rounded text-xs
+                            font-bold flex items-center justify-center">
+                          {s}
+                        </span>
+                      ))
+                    : <span className="text-xs text-gray-300">brak</span>
+                ) : (
+                  activeGroups.length > 0
+                    ? activeGroups.map(g => (
+                        <span key={g.id}
+                          className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">
+                          {g.name}
+                        </span>
+                      ))
+                    : <span className="text-xs text-gray-300">brak</span>
                 )}
               </div>
 
@@ -289,6 +340,8 @@ export default function Schedule() {
                   onSave={save}
                   onCancel={() => { setExpanded(null); setEditing(null) }}
                   saving={saving}
+                  groups={groups}
+                  mode={mode}
                 />
               </div>
             )}
