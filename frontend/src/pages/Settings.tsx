@@ -94,6 +94,7 @@ export default function SettingsPage() {
   const [cfg, setCfg] = useState<Settings>({
     wifi_ssid: '', mqtt_uri: '', mqtt_user: '', php_url: '',
     ntp_server: 'pool.ntp.org', tz_offset: 2,
+    graylog_host: '', graylog_port: 12201, graylog_enabled: false, graylog_level: 6,
   })
   const [pass, setPass]             = useState({ wifi: '', mqtt: '', token: '' })
   const [rtcTime, setRtcTime]       = useState('')
@@ -402,6 +403,57 @@ export default function SettingsPage() {
                     onChange={e => setCfg({ ...cfg, tz_offset: +e.target.value })}
                     className={`${inputCls} w-24`} />
                 </Field>
+              </div>
+            </div>
+
+            <div className="border-t border-gray-100" />
+
+            {/* Graylog */}
+            <div>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-3">
+                Logowanie (Syslog UDP / RFC 3164)
+              </p>
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between gap-3 py-1">
+                  <div>
+                    <p className="text-sm font-medium text-gray-800">Wysyłka logów</p>
+                    <p className="text-xs text-gray-400">Wysyłaj logi do serwera Graylog przez UDP</p>
+                  </div>
+                  <button
+                    onClick={() => setCfg(c => ({ ...c, graylog_enabled: !c.graylog_enabled }))}
+                    className={`relative inline-flex w-12 h-6 rounded-full transition-colors shrink-0
+                      ${cfg.graylog_enabled ? 'bg-green-500' : 'bg-gray-300'}`}
+                  >
+                    <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow
+                      transition-transform ${cfg.graylog_enabled ? 'translate-x-6' : ''}`} />
+                  </button>
+                </div>
+                {cfg.graylog_enabled && (
+                  <>
+                    <Field label="Host Graylog (IP lub nazwa hosta)">
+                      <input value={cfg.graylog_host}
+                        onChange={e => setCfg({ ...cfg, graylog_host: e.target.value })}
+                        placeholder="192.168.1.100"
+                        className={inputCls} />
+                    </Field>
+                    <Field label="Port UDP (domyślnie 12201)">
+                      <input type="number" min={1} max={65535} value={cfg.graylog_port}
+                        onChange={e => setCfg({ ...cfg, graylog_port: +e.target.value })}
+                        className={`${inputCls} w-28`} />
+                    </Field>
+                    <Field label="Minimalny poziom logów">
+                      <select value={cfg.graylog_level}
+                        onChange={e => setCfg({ ...cfg, graylog_level: +e.target.value })}
+                        className={inputCls}
+                      >
+                        <option value={3}>ERROR (tylko błędy)</option>
+                        <option value={4}>WARN (błędy + ostrzeżenia)</option>
+                        <option value={6}>INFO (zalecane)</option>
+                        <option value={7}>DEBUG (wszystko)</option>
+                      </select>
+                    </Field>
+                  </>
+                )}
               </div>
             </div>
 

@@ -21,6 +21,7 @@
 #include "esp_app_desc.h"
 #include "esp_psram.h"
 #include "esp_system.h"
+#include "logging/log_manager.h"
 #include <string.h>
 #include <stdlib.h>
 #include <time.h>
@@ -396,6 +397,10 @@ static esp_err_t handle_schedule_put(httpd_req_t *req)
     cJSON_Delete(j);
 
     schedule_set(&entry);
+    APP_LOGI("api", "Harmonogram #%d: %s dni=0x%02X %02d:%02d czas=%us sek=0x%02X grp=0x%04X",
+             id, entry.enabled ? "wł" : "wył",
+             entry.days_mask, entry.hour, entry.minute,
+             entry.duration_sec, entry.section_mask, entry.group_mask);
     JSON_RESP(req, "{\"ok\":true}");
     return ESP_OK;
 }
@@ -412,6 +417,7 @@ static esp_err_t handle_schedule_delete(httpd_req_t *req)
         return ESP_OK;
     }
     schedule_delete((uint8_t)id);
+    APP_LOGI("api", "Harmonogram #%d: usunięty", id);
     JSON_RESP(req, "{\"ok\":true}");
     return ESP_OK;
 }
@@ -478,6 +484,7 @@ static esp_err_t handle_groups_put(httpd_req_t *req)
     cJSON_Delete(j);
 
     groups_set(&group);
+    APP_LOGI("api", "Grupa %d: nazwa='%s' sekcje=0x%02X", id, group.name, group.section_mask);
     JSON_RESP(req, "{\"ok\":true}");
     return ESP_OK;
 }
@@ -500,6 +507,7 @@ static esp_err_t handle_groups_delete(httpd_req_t *req)
     snprintf(g.name, sizeof(g.name), "Grupa %d", id);
     g.section_mask = 0;
     groups_set(&g);
+    APP_LOGI("api", "Grupa %d: usunięta (reset do domyślnych)", id);
 
     JSON_RESP(req, "{\"ok\":true}");
     return ESP_OK;
@@ -546,8 +554,12 @@ static esp_err_t handle_settings_get(httpd_req_t *req)
     cJSON_AddStringToObject(root, "mqtt_uri",    g_config.mqtt_uri);
     cJSON_AddStringToObject(root, "mqtt_user",   g_config.mqtt_user);
     cJSON_AddStringToObject(root, "php_url",     g_config.php_url);
-    cJSON_AddStringToObject(root, "ntp_server",  g_config.ntp_server);
-    cJSON_AddNumberToObject(root, "tz_offset",   g_config.timezone_offset);
+    cJSON_AddStringToObject(root, "ntp_server",     g_config.ntp_server);
+    cJSON_AddNumberToObject(root, "tz_offset",      g_config.timezone_offset);
+    cJSON_AddStringToObject(root, "graylog_host",   g_config.graylog_host);
+    cJSON_AddNumberToObject(root, "graylog_port",   g_config.graylog_port);
+    cJSON_AddBoolToObject  (root, "graylog_enabled",g_config.graylog_enabled);
+    cJSON_AddNumberToObject(root, "graylog_level",  g_config.graylog_level);
     // Nie zwracamy hasła i tokenu w GET
 
     char *s = cJSON_PrintUnformatted(root);
@@ -593,8 +605,22 @@ static esp_err_t handle_settings_post(httpd_req_t *req)
     if ((v = cJSON_GetObjectItem(j, "tz_offset")))
         g_config.timezone_offset = (int8_t)v->valuedouble;
 
+    #define COPY_STR2(key, field) \
+        if ((v = cJSON_GetObjectItem(j, key)) && v->valuestring) \
+            strncpy(g_config.field, v->valuestring, sizeof(g_config.field) - 1)
+    COPY_STR2("graylog_host", graylog_host);
+    #undef COPY_STR2
+
+    if ((v = cJSON_GetObjectItem(j, "graylog_port")))
+        g_config.graylog_port = (uint16_t)v->valuedouble;
+    if ((v = cJSON_GetObjectItem(j, "graylog_enabled")))
+        g_config.graylog_enabled = cJSON_IsTrue(v);
+    if ((v = cJSON_GetObjectItem(j, "graylog_level")))
+        g_config.graylog_level = (uint8_t)v->valuedouble;
+
     cJSON_Delete(j);
     storage_save_config(&g_config);
+    APP_LOGI("api", "Settings saved");
     JSON_RESP(req, "{\"ok\":true}");
     return ESP_OK;
 }
@@ -705,6 +731,7 @@ static esp_err_t handle_time_post(httpd_req_t *req)
     localtime_r(&t, &t_local);
     char tstr[32];
     strftime(tstr, sizeof(tstr), "%Y-%m-%dT%H:%M:%S", &t_local);
+    APP_LOGI("api", "Czas ustawiony: %s", tstr);
 
     cJSON *resp = cJSON_CreateObject();
     cJSON_AddBoolToObject(resp,   "ok",   true);
@@ -1001,8 +1028,70 @@ static esp_err_t handle_irrigation_post(httpd_req_t *req)
     cJSON_Delete(j);
 
     storage_save_config(&g_config);
-    ESP_LOGI(TAG, "irrigation_today=%d ignore_php=%d",
-             g_irrigation_today, g_config.ignore_php);
+    APP_LOGI("api", "Nawadnianie: dzisiaj=%s ignoruj_skrypt=%s",
+             g_irrigation_today    ? "tak" : "nie",
+             g_config.ignore_php   ? "tak" : "nie");
+    JSON_RESP(req, "{\"ok\":true}");
+    return ESP_OK;
+}
+
+// --------------------------------------------------------------------------
+// GET /api/logs   DELETE /api/logs
+// --------------------------------------------------------------------------
+static esp_err_t handle_logs_get(httpd_req_t *req)
+{
+    CHECK_AUTH(req);
+
+    // Parsuj ?offset=N&limit=N z query string
+    char query[64] = {0};
+    int offset = 0, limit = 100;
+    if (httpd_req_get_url_query_str(req, query, sizeof(query)) == ESP_OK) {
+        char val[16];
+        if (httpd_query_key_value(query, "offset", val, sizeof(val)) == ESP_OK)
+            offset = atoi(val);
+        if (httpd_query_key_value(query, "limit",  val, sizeof(val)) == ESP_OK)
+            limit  = atoi(val);
+    }
+    if (limit > LOG_BUFFER_SIZE) limit = LOG_BUFFER_SIZE;
+
+    log_entry_t *entries = malloc(limit * sizeof(log_entry_t));
+    if (!entries) {
+        httpd_resp_set_status(req, "500 Internal Server Error");
+        JSON_RESP(req, "{\"error\":\"out of memory\"}");
+        return ESP_OK;
+    }
+
+    int count = log_get_entries(entries, limit, offset);
+    int total = log_get_total();
+
+    cJSON *root = cJSON_CreateObject();
+    cJSON_AddNumberToObject(root, "total",  total);
+    cJSON_AddNumberToObject(root, "offset", offset);
+    cJSON_AddNumberToObject(root, "count",  count);
+
+    cJSON *arr = cJSON_AddArrayToObject(root, "entries");
+    for (int i = 0; i < count; i++) {
+        cJSON *e = cJSON_CreateObject();
+        cJSON_AddNumberToObject(e, "ts",    entries[i].unix_ts);
+        cJSON_AddNumberToObject(e, "level", (int)entries[i].level);
+        cJSON_AddStringToObject(e, "tag",   entries[i].tag);
+        cJSON_AddStringToObject(e, "msg",   entries[i].msg);
+        cJSON_AddItemToArray(arr, e);
+    }
+
+    free(entries);
+    char *s = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    JSON_RESP(req, s);
+    free(s);
+    return ESP_OK;
+}
+
+static esp_err_t handle_logs_delete(httpd_req_t *req)
+{
+    CHECK_AUTH(req);
+    log_clear();
+    APP_LOGI("api", "Log buffer cleared via API");
     JSON_RESP(req, "{\"ok\":true}");
     return ESP_OK;
 }
@@ -1018,6 +1107,8 @@ esp_err_t rest_api_register(httpd_handle_t server)
 } while(0)
 
     REG("/api/info",                   HTTP_GET,    handle_info);
+    REG("/api/logs",                   HTTP_GET,    handle_logs_get);
+    REG("/api/logs",                   HTTP_DELETE, handle_logs_delete);
     REG("/api/status",                 HTTP_GET,    handle_status);
     REG("/api/irrigation",             HTTP_POST,   handle_irrigation_post);
 

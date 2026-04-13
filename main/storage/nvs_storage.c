@@ -40,6 +40,8 @@ esp_err_t storage_load_config(app_config_t *cfg)
         strncpy(cfg->ntp_server, DEFAULT_NTP_SERVER, sizeof(cfg->ntp_server) - 1);
         cfg->timezone_offset  = 1;
         cfg->irrigation_today = true;
+        cfg->graylog_port     = 12201;
+        cfg->graylog_level    = 6;
         ESP_LOGI(TAG, "config not found, using defaults");
         return ESP_OK;
     }
@@ -72,6 +74,19 @@ esp_err_t storage_load_config(app_config_t *cfg)
     nvs_get_u8(h, NVS_KEY_IGNORE_PHP, &ignore_php);
     cfg->ignore_php = (bool)ignore_php;
 
+    len = sizeof(cfg->graylog_host);
+    nvs_get_str(h, NVS_KEY_GRAYLOG_HOST, cfg->graylog_host, &len);
+
+    cfg->graylog_port = 12201;
+    nvs_get_u16(h, NVS_KEY_GRAYLOG_PORT, &cfg->graylog_port);
+
+    uint8_t glog_en = 0;
+    nvs_get_u8(h, NVS_KEY_GRAYLOG_EN, &glog_en);
+    cfg->graylog_enabled = (bool)glog_en;
+
+    cfg->graylog_level = 6; // INFO
+    nvs_get_u8(h, NVS_KEY_GRAYLOG_LEVEL, &cfg->graylog_level);
+
     nvs_close(h);
     ESP_LOGI(TAG, "config loaded (ssid='%s' ntp='%s')",
              cfg->wifi_ssid, cfg->ntp_server);
@@ -98,6 +113,10 @@ esp_err_t storage_save_config(const app_config_t *cfg)
     nvs_set_i8(h, NVS_KEY_TZ_OFFSET,   cfg->timezone_offset);
     nvs_set_u8(h, NVS_KEY_IRRIG_TODAY, (uint8_t)cfg->irrigation_today);
     nvs_set_u8(h, NVS_KEY_IGNORE_PHP,  (uint8_t)cfg->ignore_php);
+    nvs_set_str(h, NVS_KEY_GRAYLOG_HOST, cfg->graylog_host);
+    nvs_set_u16(h, NVS_KEY_GRAYLOG_PORT, cfg->graylog_port);
+    nvs_set_u8(h, NVS_KEY_GRAYLOG_EN,   (uint8_t)cfg->graylog_enabled);
+    nvs_set_u8(h, NVS_KEY_GRAYLOG_LEVEL, cfg->graylog_level);
 
     err = nvs_commit(h);
     nvs_close(h);

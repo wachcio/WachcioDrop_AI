@@ -3,6 +3,7 @@
 #include "wifi/wifi_manager.h"
 #include "rtc/rtc.h"
 #include "config.h"
+#include "logging/log_manager.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
 #include "cJSON.h"
@@ -72,8 +73,8 @@ esp_err_t daily_check_now(void)
                 cJSON *active = cJSON_GetObjectItem(j, "active");
                 if (active) {
                     g_irrigation_today = cJSON_IsTrue(active);
-                    ESP_LOGI(TAG, "irrigation_today = %s",
-                             g_irrigation_today ? "true" : "false");
+                    APP_LOGI("daily", "Sprawdzanie PHP: nawadnianie=%s",
+                             g_irrigation_today ? "tak" : "nie");
 
                     // Zapisz do NVS
                     g_config.irrigation_today = g_irrigation_today;

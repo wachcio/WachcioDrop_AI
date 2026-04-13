@@ -89,6 +89,10 @@ export interface Settings {
   php_url: string
   ntp_server: string
   tz_offset: number
+  graylog_host: string
+  graylog_port: number
+  graylog_enabled: boolean
+  graylog_level: number
 }
 
 // API calls
@@ -118,3 +122,21 @@ export const apiSaveSettings = (s: Partial<Settings> & { wifi_pass?: string; mqt
 export const apiGetTime      = ()                => api.get('/api/time')
 export const apiSetTime      = (unix: number)    => api.post('/api/time', { unix })
 export const apiSetDateTime  = (datetime: string) => api.post('/api/time', { datetime })
+
+export interface LogEntry {
+  ts: number
+  level: number  // 3=ERROR 4=WARN 6=INFO 7=DEBUG
+  tag: string
+  msg: string
+}
+
+export interface LogsResponse {
+  total: number
+  offset: number
+  count: number
+  entries: LogEntry[]
+}
+
+export const apiGetLogs   = (offset = 0, limit = 100) =>
+  api.get<LogsResponse>(`/api/logs?offset=${offset}&limit=${limit}`)
+export const apiClearLogs = () => api.delete('/api/logs')

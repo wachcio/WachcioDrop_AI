@@ -3,11 +3,13 @@
 #include "webserver/file_server.h"
 #include "storage/nvs_storage.h"
 #include "leds/leds.h"
+#include "logging/log_manager.h"
 #include "config.h"
 #include "esp_wifi.h"
 #include "esp_event.h"
 #include "esp_netif.h"
 #include "esp_log.h"
+#include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/event_groups.h"
@@ -19,10 +21,11 @@ static const char *TAG = "wifi";
 #define WIFI_FAIL_BIT       BIT1
 
 static EventGroupHandle_t s_wifi_event_group;
-static wifi_state_t       s_state      = WIFI_STATE_UNCONFIGURED;
-static int                s_retries    = 0;
-static char               s_ip[16]     = "0.0.0.0";
-static bool               s_force_ap   = false;
+static wifi_state_t       s_state        = WIFI_STATE_UNCONFIGURED;
+static int                s_retries      = 0;
+static char               s_ip[16]       = "0.0.0.0";
+static bool               s_force_ap     = false;
+static bool               s_boot_logged  = false; // czy wysłano log startowy
 
 extern app_config_t g_config;
 
@@ -186,6 +189,19 @@ void wifi_manager_task(void *arg)
                 s_state = WIFI_STATE_CONNECTED;
                 leds_set_bit(BIT_LED_WIFI, true);
                 ESP_LOGI(TAG, "STA connected: %s", s_ip);
+                // Wyślij log startowy raz po pierwszym połączeniu
+                if (!s_boot_logged) {
+                    s_boot_logged = true;
+                    static const char * const reset_reasons[] = {
+                        "nieznany", "zasilanie", "zewnętrzny", "oprogramowanie",
+                        "wyjątek/panika", "watchdog int.", "watchdog zadania",
+                        "deep sleep", "JTAG"
+                    };
+                    esp_reset_reason_t rr = esp_reset_reason();
+                    int rri = (rr < 9) ? (int)rr : 0;
+                    APP_LOGI("system", "WachcioDrop v" FW_VERSION " online | IP: %s | reset: %s",
+                             s_ip, reset_reasons[rri]);
+                }
             } else if (bits & WIFI_FAIL_BIT) {
                 s_state = WIFI_STATE_AP_MODE;
                 ESP_LOGW(TAG, "STA connect failed, staying in AP mode");

@@ -19,6 +19,10 @@
 #define NVS_KEY_TZ_OFFSET       "tz_offset"
 #define NVS_KEY_IRRIG_TODAY     "irrig_today"
 #define NVS_KEY_IGNORE_PHP      "ignore_php"
+#define NVS_KEY_GRAYLOG_HOST    "glog_host"
+#define NVS_KEY_GRAYLOG_PORT    "glog_port"
+#define NVS_KEY_GRAYLOG_EN      "glog_en"
+#define NVS_KEY_GRAYLOG_LEVEL   "glog_level"
 
 typedef struct {
     char    wifi_ssid[64];
@@ -31,7 +35,11 @@ typedef struct {
     char    ntp_server[64];
     int8_t  timezone_offset;
     bool    irrigation_today;
-    bool    ignore_php;        // true = ignoruj wynik PHP check, zawsze nawadniaj
+    bool    ignore_php;
+    char    graylog_host[64];
+    uint16_t graylog_port;
+    bool    graylog_enabled;
+    uint8_t graylog_level;     // LOG_LVL_* (6=INFO domyślnie)
 } app_config_t;
 
 typedef struct {

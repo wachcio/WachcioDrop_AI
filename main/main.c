@@ -13,13 +13,21 @@
 #include "webserver/file_server.h"
 #include "mqtt/mqtt_manager.h"
 #include "daily_check/daily_check.h"
+#include "logging/log_manager.h"
 #include "esp_log.h"
+#include "esp_system.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include <stdlib.h>
 #include <time.h>
 
 static const char *TAG = "main";
+
+static void on_shutdown(void)
+{
+    APP_LOGI("system", "WachcioDrop v" FW_VERSION " restart (software)");
+    vTaskDelay(pdMS_TO_TICKS(200));
+}
 
 // Globalne zmienne dostępne z innych modułów
 app_config_t g_config          = {0};
@@ -29,6 +37,15 @@ void app_main(void)
 {
     ESP_LOGI(TAG, "=== Irrigation Controller v1.0 ===");
     ESP_LOGI(TAG, "ESP32-S3 N16R8 | ESP-IDF %s", esp_get_idf_version());
+
+    // ------------------------------------------------------------------
+    // 0. Log manager - jak najwcześniej
+    // ------------------------------------------------------------------
+    log_manager_init();
+    APP_LOGI("main", "WachcioDrop v" FW_VERSION " start (IDF %s)", esp_get_idf_version());
+
+    // Handler wywoływany przed softwarowym resetem (np. OTA, restart API)
+    esp_register_shutdown_handler(on_shutdown);
 
     // ------------------------------------------------------------------
     // 1. LED driver (74HC595) - PIERWSZE: zeruje chipy, zapobiega

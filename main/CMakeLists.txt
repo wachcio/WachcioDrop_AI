@@ -17,6 +17,7 @@ idf_component_register(
         "webserver/file_server.c"
         "mqtt/mqtt_manager.c"
         "daily_check/daily_check.c"
+        "logging/log_manager.c"
 
     INCLUDE_DIRS
         "."

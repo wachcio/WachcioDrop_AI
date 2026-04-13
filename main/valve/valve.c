@@ -2,6 +2,7 @@
 #include "leds/leds.h"
 #include "groups/groups.h"
 #include "config.h"
+#include "logging/log_manager.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
@@ -74,8 +75,8 @@ esp_err_t valve_section_on(uint8_t section, uint32_t duration_sec)
     }
     apply_state();
     xSemaphoreGive(s_mutex);
-    groups_clear_active();  // manualna zmiana sekcji — żadna grupa nie jest aktywna
-    ESP_LOGI(TAG, "section %d ON exclusive (duration=%lus)", section, (unsigned long)duration_sec);
+    groups_clear_active();
+    APP_LOGI("valve", "Sekcja %d ON (czas: %lus)", section, (unsigned long)duration_sec);
     if (s_state_cb) s_state_cb();
     return ESP_OK;
 }
@@ -89,8 +90,8 @@ esp_err_t valve_section_off(uint8_t section)
     s_sections[section].started_at    = 0;
     apply_state();
     xSemaphoreGive(s_mutex);
-    groups_clear_active();  // manualna zmiana sekcji — żadna grupa nie jest aktywna
-    ESP_LOGI(TAG, "section %d OFF", section);
+    groups_clear_active();
+    APP_LOGI("valve", "Sekcja %d OFF", section);
     if (s_state_cb) s_state_cb();
     return ESP_OK;
 }
@@ -108,8 +109,7 @@ esp_err_t valve_sections_on(uint8_t section_mask, uint32_t duration_sec)
     }
     apply_state();
     xSemaphoreGive(s_mutex);
-    ESP_LOGI(TAG, "sections 0x%02X ON (duration=%lus)",
-             section_mask, (unsigned long)duration_sec);
+    APP_LOGI("valve", "Sekcje mask=0x%02X ON (czas: %lus)", section_mask, (unsigned long)duration_sec);
     if (s_state_cb) s_state_cb();
     return ESP_OK;
 }
@@ -125,7 +125,7 @@ esp_err_t valve_all_off(void)
     apply_state();
     xSemaphoreGive(s_mutex);
     groups_clear_active();
-    ESP_LOGI(TAG, "all sections OFF");
+    APP_LOGI("valve", "Wszystkie sekcje OFF");
     if (s_state_cb) s_state_cb();
     return ESP_OK;
 }

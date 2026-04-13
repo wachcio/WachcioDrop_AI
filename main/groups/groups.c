@@ -2,6 +2,7 @@
 #include "valve/valve.h"
 #include "storage/nvs_storage.h"
 #include "config.h"
+#include "logging/log_manager.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
@@ -80,9 +81,9 @@ esp_err_t groups_activate(uint8_t group_id, uint32_t duration_sec)
         ESP_LOGW(TAG, "group %d has no sections", group_id);
         return ESP_OK;
     }
-    ESP_LOGI(TAG, "group %d activate: sections=0x%02X duration=%lus",
-             group_id, sections, (unsigned long)duration_sec);
-    valve_all_off();               // czyści active_group_id wewnątrz
-    s_active_group_id = group_id; // ustaw PO all_off
+    APP_LOGI("groups", "Grupa %d (%s) ON sekcje=0x%02X czas=%lus",
+             group_id, s_groups[group_id-1].name, sections, (unsigned long)duration_sec);
+    valve_all_off();
+    s_active_group_id = group_id;
     return valve_sections_on(sections, duration_sec);
 }

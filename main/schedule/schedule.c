@@ -4,6 +4,7 @@
 #include "storage/nvs_storage.h"
 #include "rtc/rtc.h"
 #include "config.h"
+#include "logging/log_manager.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
@@ -93,7 +94,7 @@ static void check_and_fire(const struct tm *now)
         }
 
         if (final_mask) {
-            ESP_LOGI(TAG, "entry %d firing: sections=0x%02X duration=%us",
+            APP_LOGI("sched", "Wpis #%d uruchomiony sekcje=0x%02X czas=%us",
                      i, final_mask, e->duration_sec);
             valve_sections_on(final_mask, e->duration_sec);
         }
