@@ -122,6 +122,7 @@ export const apiSaveSettings = (s: Partial<Settings> & { wifi_pass?: string; mqt
 export const apiGetTime      = ()                => api.get('/api/time')
 export const apiSetTime      = (unix: number)    => api.post('/api/time', { unix })
 export const apiSetDateTime  = (datetime: string) => api.post('/api/time', { datetime })
+export const apiSyncNtp      = ()                => api.post('/api/time/sntp')
 
 export interface LogEntry {
   ts: number

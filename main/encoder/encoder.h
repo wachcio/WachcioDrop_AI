@@ -14,5 +14,8 @@ typedef enum {
 
 esp_err_t encoder_init(void);
 
+// Ustaw liczbę kroków kwadraturowych na jeden klik (1/2/4, domyślnie 4)
+void encoder_set_steps(uint8_t steps);
+
 // Pobierz kolejkę zdarzeń (QueueHandle_t encoder_event_t)
 QueueHandle_t encoder_get_queue(void);

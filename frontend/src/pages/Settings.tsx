@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
-import { KeyRound, Wifi, Radio, Globe, Clock, Save, RefreshCw, SlidersHorizontal, Droplets, CloudOff } from 'lucide-react'
-import { apiGetSettings, apiSaveSettings, apiGetTime, apiSetDateTime, apiGetStatus, apiSetIrrigation, api, Settings, setToken, SystemStatus } from '../api/client'
+import { KeyRound, Wifi, Radio, Globe, Clock, Save, RefreshCw, SlidersHorizontal, Droplets, CloudOff, Antenna } from 'lucide-react'
+import { apiGetSettings, apiSaveSettings, apiGetTime, apiSetDateTime, apiGetStatus, apiSetIrrigation, apiSyncNtp, api, Settings, setToken, SystemStatus } from '../api/client'
 
 export type ScheduleMode = 'sections' | 'groups'
 export const SCHEDULE_MODE_KEY = 'schedule_mode'
@@ -470,16 +470,35 @@ export default function SettingsPage() {
               </p>
             </div>
             <p className="text-sm text-gray-500">
-              Synchronizacja ustawia czas RTC na podstawie czasu lokalnego przeglądarki.
+              Synchronizacja ustawia czas RTC na podstawie czasu lokalnego przeglądarki lub serwera NTP.
             </p>
-            <button
-              onClick={syncTime}
-              className="flex items-center gap-2 bg-gray-700 hover:bg-gray-800 text-white
-                px-4 py-2.5 rounded-xl text-sm font-medium transition-colors w-fit"
-            >
-              <RefreshCw size={15} />
-              Synchronizuj z przeglądarką
-            </button>
+            <div className="flex gap-2 flex-wrap">
+              <button
+                onClick={syncTime}
+                className="flex items-center gap-2 bg-gray-700 hover:bg-gray-800 text-white
+                  px-4 py-2.5 rounded-xl text-sm font-medium transition-colors"
+              >
+                <RefreshCw size={15} />
+                Synchronizuj z przeglądarką
+              </button>
+              <button
+                onClick={async () => {
+                  try {
+                    await apiSyncNtp()
+                    toast.success('Synchronizacja NTP zakończona')
+                    apiGetTime().then(r => setRtcTime(r.data.time.replace('T', ' '))).catch(() => {})
+                  } catch (e: any) {
+                    const msg = e?.response?.data?.error
+                    toast.error(msg === 'no WiFi connection' ? 'Brak połączenia WiFi' : 'Błąd synchronizacji NTP')
+                  }
+                }}
+                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white
+                  px-4 py-2.5 rounded-xl text-sm font-medium transition-colors"
+              >
+                <Antenna size={15} />
+                Synchronizuj z NTP
+              </button>
+            </div>
           </div>
         )}
 

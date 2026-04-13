@@ -9,13 +9,16 @@
 
 static const char *TAG = "encoder";
 
-#define DEBOUNCE_MS         5
+#define DEBOUNCE_MS         20      // debounce przycisku SW
 #define LONG_PRESS_MS       1000
 #define ENCODER_QUEUE_SIZE  16
+#define STARTUP_IGNORE_MS   500    // ignoruj zdarzenia przez pierwsze 500ms
 
 static QueueHandle_t s_queue;
-static volatile int64_t s_btn_press_time = 0;
-static volatile bool    s_btn_pressed    = false;
+static volatile int64_t s_btn_press_time  = 0;
+static volatile bool    s_btn_pressed     = false;
+static volatile int64_t s_sw_last_edge    = 0;   // czas ostatniego zbocza SW
+static volatile int8_t  s_enc_acc         = 0;   // akumulator kroków (4 na 1 klik)
 
 // Lookup table dla dekodera quadraturowego
 // Indeks = (prev_ab << 2) | curr_ab → wartość: -1, 0, +1
@@ -42,19 +45,40 @@ static void IRAM_ATTR gpio_isr_handler(void *arg)
 
         int8_t dir = s_enc_table[s_enc_state & 0x0F];
         if (dir != 0) {
-            encoder_event_t evt = (dir > 0) ? ENCODER_EVENT_RIGHT : ENCODER_EVENT_LEFT;
-            xQueueSendFromISR(s_queue, &evt, &higher_woken);
+            // Resetuj akumulator przy zmianie kierunku (anty-drgania)
+            if ((dir > 0 && s_enc_acc < 0) || (dir < 0 && s_enc_acc > 0))
+                s_enc_acc = 0;
+            s_enc_acc += dir;
+            // Emituj zdarzenie po 4 krokach (jeden pełny cykl kwadraturowy = 1 klik)
+            if (s_enc_acc >= 4) {
+                s_enc_acc = 0;
+                encoder_event_t e = ENCODER_EVENT_RIGHT;
+                xQueueSendFromISR(s_queue, &e, &higher_woken);
+            } else if (s_enc_acc <= -4) {
+                s_enc_acc = 0;
+                encoder_event_t e = ENCODER_EVENT_LEFT;
+                xQueueSendFromISR(s_queue, &e, &higher_woken);
+            }
         }
     } else if (gpio == PIN_ENC_SW) {
+        int64_t now = esp_timer_get_time();
+
+        // Ignoruj zdarzenia tuż po starcie (piny się stabilizują)
+        if (now < (int64_t)STARTUP_IGNORE_MS * 1000) goto done;
+
+        // Debounce: ignoruj zbocza bliższe niż DEBOUNCE_MS
+        if (now - s_sw_last_edge < (int64_t)DEBOUNCE_MS * 1000) goto done;
+        s_sw_last_edge = now;
+
         int level = gpio_get_level(PIN_ENC_SW);
         if (level == 0) {
             // przycisk wciśnięty (active low)
-            s_btn_press_time = esp_timer_get_time();
+            s_btn_press_time = now;
             s_btn_pressed    = true;
         } else {
             // przycisk zwolniony
             if (s_btn_pressed) {
-                int64_t held_ms = (esp_timer_get_time() - s_btn_press_time) / 1000;
+                int64_t held_ms = (now - s_btn_press_time) / 1000;
                 encoder_event_t evt = (held_ms >= LONG_PRESS_MS)
                                       ? ENCODER_EVENT_LONG
                                       : ENCODER_EVENT_PRESS;
@@ -64,6 +88,7 @@ static void IRAM_ATTR gpio_isr_handler(void *arg)
         }
     }
 
+done:
     if (higher_woken) portYIELD_FROM_ISR();
 }
 

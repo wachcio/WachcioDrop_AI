@@ -84,22 +84,21 @@ static void draw_home(void)
 static void draw_main_menu(void)
 {
     display_text_full(0, "=== MENU ===", false);
-    display_text_full(1, "----------------", false);
 
-    for (int i = 0; i < MAIN_MENU_COUNT && i < MENU_VISIBLE_ROWS; i++) {
+    for (int i = 0; i < MENU_VISIBLE_ROWS; i++) {
         int idx = s_scroll + i;
-        if (MAIN_MENU[idx] == NULL) break;
         char buf[18];
-        snprintf(buf, sizeof(buf), "%s%s",
-                 (idx == s_cursor) ? "> " : "  ",
-                 MAIN_MENU[idx]);
-        display_text_full(i + 1, buf, idx == s_cursor);
+        if (MAIN_MENU[idx] != NULL) {
+            snprintf(buf, sizeof(buf), "%s%s",
+                     (idx == s_cursor) ? "> " : "  ",
+                     MAIN_MENU[idx]);
+            display_text_full(i + 1, buf, idx == s_cursor);
+        } else {
+            display_text_full(i + 1, "", false);
+        }
     }
-    // Wyczyść nieużywane wiersze
-    for (int i = MAIN_MENU_COUNT; i < MENU_VISIBLE_ROWS; i++) {
-        display_text_full(i + 1, "", false);
-    }
-    display_text_full(7, "", false);
+    display_text_full(6, "", false);
+    display_text_full(7, "LNG=powrot", false);
 }
 
 static void draw_manual(void)
@@ -248,8 +247,6 @@ void menu_task(void *arg)
     QueueHandle_t enc_queue = encoder_get_queue();
     ESP_LOGI(TAG, "task started");
 
-    menu_screen_t s_screen_prev = (menu_screen_t)-1;
-
     while (1) {
         // Obsłuż zdarzenia enkodera (nieblokująco)
         encoder_event_t evt;
@@ -257,20 +254,23 @@ void menu_task(void *arg)
             menu_handle_event(evt);
         }
 
-        // Wyczyść ekran tylko przy zmianie ekranu (eliminuje miganie)
-        if (s_screen != s_screen_prev) {
-            display_clear();
-            s_screen_prev = s_screen;
-        }
 
-        // Odśwież ekran (nadpisuje wiersze bez czyszczenia)
+        // Odśwież ekran (nadpisuje wszystkie wiersze bez poprzedniego czyszczenia)
         switch (s_screen) {
         case MENU_SCREEN_HOME:     draw_home();      break;
         case MENU_SCREEN_MAIN:     draw_main_menu(); break;
         case MENU_SCREEN_MANUAL:   draw_manual();    break;
         case MENU_SCREEN_INFO:     draw_info();      break;
         default:
-            display_text_full(3, "  [patrz www]", false);
+            // Harmonogram / Grupy / Ustawienia — sterowanie przez WWW
+            display_text_full(0, "", false);
+            display_text_full(1, "", false);
+            display_text_full(2, "", false);
+            display_text_full(3, " Uzyj aplikacji", false);
+            display_text_full(4, " webowej (WWW)", false);
+            display_text_full(5, "", false);
+            display_text_full(6, "", false);
+            display_text_full(7, "LNG=powrot", false);
             break;
         }
 
