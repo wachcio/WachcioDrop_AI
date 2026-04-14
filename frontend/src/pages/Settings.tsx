@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
-import { KeyRound, Wifi, Radio, Globe, Clock, Save, RefreshCw, SlidersHorizontal, Droplets, CloudOff, Antenna } from 'lucide-react'
-import { apiGetSettings, apiSaveSettings, apiGetTime, apiSetDateTime, apiGetStatus, apiSetIrrigation, apiSyncNtp, api, Settings, setToken, SystemStatus } from '../api/client'
+import { KeyRound, Wifi, Radio, Globe, Clock, Save, RefreshCw, SlidersHorizontal, Droplets, CloudOff, Antenna, Upload, AlertTriangle, CheckCircle, XCircle } from 'lucide-react'
+import { apiGetSettings, apiSaveSettings, apiGetTime, apiSetDateTime, apiGetStatus, apiSetIrrigation, apiSyncNtp, apiOtaUpload, api, Settings, setToken, SystemStatus } from '../api/client'
 
 export type ScheduleMode = 'sections' | 'groups'
 export const SCHEDULE_MODE_KEY = 'schedule_mode'
@@ -9,7 +9,7 @@ export function getScheduleMode(): ScheduleMode {
   return (localStorage.getItem(SCHEDULE_MODE_KEY) as ScheduleMode) ?? 'sections'
 }
 
-type Tab = 'glowne' | 'token' | 'wifi' | 'mqtt' | 'uslugi' | 'czas'
+type Tab = 'glowne' | 'token' | 'wifi' | 'mqtt' | 'uslugi' | 'czas' | 'ota'
 
 const TABS: { id: Tab; icon: typeof KeyRound; label: string }[] = [
   { id: 'glowne', icon: SlidersHorizontal, label: 'Główne' },
@@ -18,6 +18,7 @@ const TABS: { id: Tab; icon: typeof KeyRound; label: string }[] = [
   { id: 'mqtt',   icon: Radio,             label: 'MQTT'   },
   { id: 'uslugi', icon: Globe,             label: 'Usługi' },
   { id: 'czas',   icon: Clock,             label: 'Czas'   },
+  { id: 'ota',    icon: Upload,            label: 'OTA'    },
 ]
 
 function Field({
@@ -102,6 +103,11 @@ export default function SettingsPage() {
   const [localToken, setLocalToken] = useState(
     localStorage.getItem('api_token') ?? ''
   )
+  type OtaStatus = 'idle' | 'uploading' | 'rebooting' | 'error'
+  const [otaFile, setOtaFile]       = useState<File | null>(null)
+  const [otaStatus, setOtaStatus]   = useState<OtaStatus>('idle')
+  const [otaProgress, setOtaProgress] = useState(0)
+  const [otaError, setOtaError]     = useState('')
 
   useEffect(() => {
     apiGetSettings().then(r => setCfg(r.data)).catch(() => {})
@@ -166,6 +172,23 @@ export default function SettingsPage() {
   const saveToken = () => {
     setToken(localToken)
     toast.success('Token zapisany w przeglądarce')
+  }
+
+  const startOta = async () => {
+    if (!otaFile) return
+    setOtaStatus('uploading')
+    setOtaProgress(0)
+    setOtaError('')
+    try {
+      await apiOtaUpload(otaFile, setOtaProgress)
+      setOtaStatus('rebooting')
+      toast.success('Firmware wgrany — urządzenie restartuje się')
+    } catch (e: any) {
+      const msg = e?.response?.data?.error ?? 'Błąd wgrywania firmware'
+      setOtaError(msg)
+      setOtaStatus('error')
+      toast.error(msg)
+    }
   }
 
   return (
@@ -458,6 +481,104 @@ export default function SettingsPage() {
             </div>
 
             <SaveButton saving={saving} onClick={save} />
+          </div>
+        )}
+
+        {tab === 'ota' && (
+          <div className="flex flex-col gap-5">
+
+            {/* Aktualna wersja */}
+            {devStatus && (
+              <div className="bg-gray-50 rounded-xl p-4">
+                <p className="text-xs text-gray-400 mb-1">Aktualna wersja firmware</p>
+                <p className="text-lg font-mono font-bold text-gray-800">
+                  {devStatus.fw_version ?? '—'}
+                </p>
+                <p className="text-xs text-gray-400 mt-1">
+                  ESP-IDF {devStatus.idf_version ?? '—'}
+                </p>
+              </div>
+            )}
+
+            {/* Ostrzeżenie */}
+            <div className="flex items-start gap-3 p-3 bg-orange-50 border border-orange-100 rounded-xl">
+              <AlertTriangle size={18} className="text-orange-500 shrink-0 mt-0.5" />
+              <p className="text-sm text-orange-700">
+                Po wgraniu firmware urządzenie zostanie automatycznie zrestartowane.
+                Upewnij się, że żadne sekcje nie są aktywne.
+              </p>
+            </div>
+
+            {/* Wybór pliku */}
+            {otaStatus !== 'rebooting' && (
+              <Field label="Plik firmware (.bin)">
+                <input
+                  type="file"
+                  accept=".bin"
+                  disabled={otaStatus === 'uploading'}
+                  onChange={e => {
+                    setOtaFile(e.target.files?.[0] ?? null)
+                    setOtaStatus('idle')
+                    setOtaError('')
+                  }}
+                  className={inputCls}
+                />
+              </Field>
+            )}
+
+            {/* Przycisk upload */}
+            {otaFile && otaStatus === 'idle' && (
+              <button
+                onClick={startOta}
+                className="flex items-center gap-2 bg-orange-600 hover:bg-orange-700 text-white
+                  px-4 py-2.5 rounded-xl text-sm font-medium transition-colors w-fit"
+              >
+                <Upload size={15} />
+                Wgraj firmware ({(otaFile.size / 1024 / 1024).toFixed(2)} MB)
+              </button>
+            )}
+
+            {/* Pasek postępu */}
+            {otaStatus === 'uploading' && (
+              <div className="flex flex-col gap-2">
+                <div className="flex justify-between text-xs text-gray-500">
+                  <span>Przesyłanie…</span>
+                  <span>{otaProgress}%</span>
+                </div>
+                <div className="w-full bg-gray-200 rounded-full h-2.5">
+                  <div
+                    className="bg-orange-500 h-2.5 rounded-full transition-all duration-300"
+                    style={{ width: `${otaProgress}%` }}
+                  />
+                </div>
+                <p className="text-xs text-gray-400">Nie zamykaj strony podczas aktualizacji</p>
+              </div>
+            )}
+
+            {/* Sukces / reboot */}
+            {otaStatus === 'rebooting' && (
+              <div className="flex items-center gap-3 p-4 bg-green-50 border border-green-100 rounded-xl">
+                <CheckCircle size={20} className="text-green-600 shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-green-800">Firmware wgrany pomyślnie</p>
+                  <p className="text-xs text-green-600 mt-0.5">
+                    Urządzenie restartuje się — odczekaj kilkanaście sekund, a następnie odśwież stronę.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Błąd */}
+            {otaStatus === 'error' && (
+              <div className="flex items-center gap-3 p-4 bg-red-50 border border-red-100 rounded-xl">
+                <XCircle size={20} className="text-red-500 shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-red-800">Błąd aktualizacji</p>
+                  <p className="text-xs text-red-600 mt-0.5">{otaError}</p>
+                </div>
+              </div>
+            )}
+
           </div>
         )}
 

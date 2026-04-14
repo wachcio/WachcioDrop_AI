@@ -55,6 +55,8 @@ export interface SystemStatus {
   ignore_php: boolean
   php_url_set: boolean
   time: string
+  fw_version: string
+  idf_version: string
   sections: SectionState[]
   groups: GroupStatus[]
 }
@@ -141,3 +143,14 @@ export interface LogsResponse {
 export const apiGetLogs   = (offset = 0, limit = 100) =>
   api.get<LogsResponse>(`/api/logs?offset=${offset}&limit=${limit}`)
 export const apiClearLogs = () => api.delete('/api/logs')
+
+export const apiOtaUpload = (
+  file: File,
+  onProgress: (pct: number) => void
+) => api.post('/api/ota', file, {
+  headers: { 'Content-Type': 'application/octet-stream' },
+  timeout: 120000,
+  onUploadProgress: (e) => {
+    if (e.total) onProgress(Math.round((e.loaded / e.total) * 100))
+  },
+})

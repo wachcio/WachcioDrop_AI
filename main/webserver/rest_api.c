@@ -948,42 +948,85 @@ static esp_err_t handle_settings_import(httpd_req_t *req)
 // --------------------------------------------------------------------------
 // POST /api/ota
 // --------------------------------------------------------------------------
+#define OTA_BUF_SIZE 4096
 static esp_err_t handle_ota(httpd_req_t *req)
 {
     CHECK_AUTH(req);
 
-    esp_ota_handle_t ota_handle;
+    if (req->content_len == 0) {
+        JSON_RESP(req, "{\"error\":\"no data\"}");
+        return ESP_OK;
+    }
+
     const esp_partition_t *update_partition = esp_ota_get_next_update_partition(NULL);
     if (!update_partition) {
         JSON_RESP(req, "{\"error\":\"no OTA partition\"}");
         return ESP_OK;
     }
 
+    esp_ota_handle_t ota_handle;
     esp_err_t err = esp_ota_begin(update_partition, OTA_WITH_SEQUENTIAL_WRITES,
-                                   &ota_handle);
+                                  &ota_handle);
     if (err != ESP_OK) {
+        ESP_LOGE(TAG, "ota_begin failed: %s", esp_err_to_name(err));
         JSON_RESP(req, "{\"error\":\"ota_begin failed\"}");
         return ESP_OK;
     }
 
-    char buf[1024];
-    int remaining = req->content_len;
-    while (remaining > 0) {
-        int n = httpd_req_recv(req, buf,
-                               MIN(remaining, (int)sizeof(buf)));
-        if (n <= 0) { esp_ota_abort(ota_handle); break; }
-        esp_ota_write(ota_handle, buf, n);
-        remaining -= n;
+    char *buf = malloc(OTA_BUF_SIZE);
+    if (!buf) {
+        esp_ota_abort(ota_handle);
+        JSON_RESP(req, "{\"error\":\"out of memory\"}");
+        return ESP_OK;
     }
 
-    if (remaining == 0 && esp_ota_end(ota_handle) == ESP_OK) {
-        esp_ota_set_boot_partition(update_partition);
-        JSON_RESP(req, "{\"ok\":true,\"msg\":\"rebooting\"}");
-        vTaskDelay(pdMS_TO_TICKS(500));
-        esp_restart();
-    } else {
-        JSON_RESP(req, "{\"error\":\"ota failed\"}");
+    APP_LOGI("ota", "OTA start: %d B → %s", req->content_len, update_partition->label);
+
+    int remaining = req->content_len;
+    bool write_ok = true;
+    while (remaining > 0) {
+        int n = httpd_req_recv(req, buf, MIN(remaining, OTA_BUF_SIZE));
+        if (n <= 0) {
+            ESP_LOGE(TAG, "recv error %d, remaining %d", n, remaining);
+            write_ok = false;
+            break;
+        }
+        err = esp_ota_write(ota_handle, buf, n);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "ota_write failed: %s", esp_err_to_name(err));
+            write_ok = false;
+            break;
+        }
+        remaining -= n;
     }
+    free(buf);
+
+    if (!write_ok) {
+        esp_ota_abort(ota_handle);
+        APP_LOGI("ota", "OTA nieudane (błąd transferu)");
+        JSON_RESP(req, "{\"error\":\"transfer failed\"}");
+        return ESP_OK;
+    }
+
+    err = esp_ota_end(ota_handle);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "ota_end failed: %s", esp_err_to_name(err));
+        APP_LOGI("ota", "OTA nieudane (weryfikacja obrazu): %s", esp_err_to_name(err));
+        JSON_RESP(req, "{\"error\":\"image invalid\"}");
+        return ESP_OK;
+    }
+
+    err = esp_ota_set_boot_partition(update_partition);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "set_boot_partition failed: %s", esp_err_to_name(err));
+        JSON_RESP(req, "{\"error\":\"set boot failed\"}");
+        return ESP_OK;
+    }
+
+    APP_LOGI("ota", "OTA sukces — restart");
+    JSON_RESP(req, "{\"ok\":true,\"msg\":\"rebooting\"}");
+    vTaskDelay(pdMS_TO_TICKS(500));
+    esp_restart();
     return ESP_OK;
 }
 

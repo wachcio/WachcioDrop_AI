@@ -118,6 +118,7 @@ void file_server_start(void)
     cfg.stack_size            = TASK_STACK_WEBSERVER;
     cfg.uri_match_fn          = httpd_uri_match_wildcard;
     cfg.lru_purge_enable      = true;
+    cfg.recv_wait_timeout     = 30;   // 30s — wymagane dla dużych plików OTA
 
     if (httpd_start(&s_server, &cfg) != ESP_OK) {
         ESP_LOGE(TAG, "httpd_start failed");
