@@ -154,3 +154,16 @@ export const apiOtaUpload = (
     if (e.total) onProgress(Math.round((e.loaded / e.total) * 100))
   },
 })
+
+export const apiSpiffsUpload = (
+  file: File,
+  onProgress: (pct: number) => void
+) => api.post('/api/ota/spiffs', file, {
+  headers: { 'Content-Type': 'application/octet-stream' },
+  timeout: 120000,
+  onUploadProgress: (e) => {
+    if (e.total) onProgress(Math.round((e.loaded / e.total) * 100))
+  },
+})
+
+export const apiRestart = () => api.post('/api/restart')

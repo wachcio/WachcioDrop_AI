@@ -16,6 +16,7 @@
 #include "logging/log_manager.h"
 #include "esp_log.h"
 #include "esp_system.h"
+#include "esp_ota_ops.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include <stdlib.h>
@@ -35,6 +36,9 @@ bool         g_irrigation_today = true;
 
 void app_main(void)
 {
+    // Potwierdź że nowe firmware po OTA jest sprawne (zapobiega rollbackowi)
+    esp_ota_mark_app_valid_cancel_rollback();
+
     ESP_LOGI(TAG, "=== Irrigation Controller v1.0 ===");
     ESP_LOGI(TAG, "ESP32-S3 N16R8 | ESP-IDF %s", esp_get_idf_version());
 

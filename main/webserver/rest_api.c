@@ -4,6 +4,8 @@
 #include "leds/leds.h"
 #include "config.h"
 #include "esp_timer.h"
+#include "esp_partition.h"
+#include "esp_spiffs.h"
 
 #ifndef MIN
 #define MIN(a, b) ((a) < (b) ? (a) : (b))
@@ -96,6 +98,11 @@ static esp_err_t handle_info(httpd_req_t *req)
     cJSON_AddStringToObject(root, "app_name",     app->project_name);
     cJSON_AddStringToObject(root, "build_date",   app->date);
     cJSON_AddStringToObject(root, "build_time",   app->time);
+    char build_hash[65] = {0};
+    for (int i = 0; i < 32; i++) {
+        snprintf(build_hash + i * 2, 3, "%02x", app->app_elf_sha256[i]);
+    }
+    cJSON_AddStringToObject(root, "build_hash", build_hash);
     cJSON_AddNumberToObject(root, "flash_mb",     CONFIG_ESPTOOLPY_FLASHSIZE_16MB ? 16 : 4);
     cJSON_AddNumberToObject(root, "psram_kb",     esp_psram_get_size() / 1024);
     cJSON_AddNumberToObject(root, "heap_free",    esp_get_free_heap_size());
@@ -1030,6 +1037,93 @@ static esp_err_t handle_ota(httpd_req_t *req)
     return ESP_OK;
 }
 
+// POST /api/ota/spiffs
+// --------------------------------------------------------------------------
+static esp_err_t handle_spiffs_ota(httpd_req_t *req)
+{
+    CHECK_AUTH(req);
+
+    if (req->content_len == 0) {
+        JSON_RESP(req, "{\"error\":\"no data\"}");
+        return ESP_OK;
+    }
+
+    const esp_partition_t *part = esp_partition_find_first(
+        ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_SPIFFS, "spiffs");
+    if (!part) {
+        JSON_RESP(req, "{\"error\":\"no spiffs partition\"}");
+        return ESP_OK;
+    }
+
+    if ((uint32_t)req->content_len > part->size) {
+        JSON_RESP(req, "{\"error\":\"file too large\"}");
+        return ESP_OK;
+    }
+
+    APP_LOGI("ota", "SPIFFS OTA start: %d B", req->content_len);
+
+    // Odmontuj SPIFFS przed zapisem
+    esp_vfs_spiffs_unregister("spiffs");
+
+    esp_err_t err = esp_partition_erase_range(part, 0, part->size);
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "spiffs erase failed: %s", esp_err_to_name(err));
+        JSON_RESP(req, "{\"error\":\"erase failed\"}");
+        return ESP_OK;
+    }
+
+    char *buf = malloc(OTA_BUF_SIZE);
+    if (!buf) {
+        JSON_RESP(req, "{\"error\":\"out of memory\"}");
+        return ESP_OK;
+    }
+
+    int remaining = req->content_len;
+    uint32_t offset = 0;
+    bool write_ok = true;
+
+    while (remaining > 0) {
+        int n = httpd_req_recv(req, buf, MIN(remaining, OTA_BUF_SIZE));
+        if (n <= 0) {
+            ESP_LOGE(TAG, "spiffs recv error %d", n);
+            write_ok = false;
+            break;
+        }
+        err = esp_partition_write(part, offset, buf, n);
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "spiffs write failed: %s", esp_err_to_name(err));
+            write_ok = false;
+            break;
+        }
+        offset += n;
+        remaining -= n;
+    }
+    free(buf);
+
+    if (!write_ok) {
+        APP_LOGI("ota", "SPIFFS OTA nieudane");
+        JSON_RESP(req, "{\"error\":\"write failed\"}");
+        return ESP_OK;
+    }
+
+    APP_LOGI("ota", "SPIFFS OTA sukces: %lu B", (unsigned long)offset);
+    JSON_RESP(req, "{\"ok\":true,\"msg\":\"spiffs updated\"}");
+    return ESP_OK;
+}
+
+// --------------------------------------------------------------------------
+// POST /api/restart
+// --------------------------------------------------------------------------
+static esp_err_t handle_restart(httpd_req_t *req)
+{
+    CHECK_AUTH(req);
+    APP_LOGI("main", "Restart zdalny — API");
+    JSON_RESP(req, "{\"ok\":true,\"msg\":\"rebooting\"}");
+    vTaskDelay(pdMS_TO_TICKS(500));
+    esp_restart();
+    return ESP_OK;
+}
+
 // --------------------------------------------------------------------------
 // OPTIONS handler (CORS preflight)
 // --------------------------------------------------------------------------
@@ -1177,6 +1271,8 @@ esp_err_t rest_api_register(httpd_handle_t server)
     REG("/api/time/sntp",              HTTP_POST,   handle_time_sntp);
 
     REG("/api/ota",                    HTTP_POST,   handle_ota);
+    REG("/api/ota/spiffs",             HTTP_POST,   handle_spiffs_ota);
+    REG("/api/restart",                HTTP_POST,   handle_restart);
 
     REG("/api/*",                      HTTP_OPTIONS, handle_options);
 
