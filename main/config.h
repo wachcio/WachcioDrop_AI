@@ -69,7 +69,7 @@
 #define DAILY_CHECK_HOUR        22
 #define DAILY_CHECK_MINUTE      45
 
-#define API_TOKEN_LEN           32
+#define API_TOKEN_LEN           10
 #define SCHEDULE_DURATION_MAX   (4 * 60 * 60)  // 4 godziny max
 
 // =============================================================================

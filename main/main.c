@@ -62,7 +62,7 @@ void app_main(void)
 
     // Wygeneruj token jeśli pusty (pierwsze uruchomienie)
     if (g_config.api_token[0] == '\0') {
-        storage_generate_token(g_config.api_token, sizeof(g_config.api_token));
+        storage_generate_token(g_config.api_token, API_TOKEN_LEN + 1);
         storage_save_config(&g_config);
         ESP_LOGI(TAG, "generated API token: %s", g_config.api_token);
     }
@@ -117,10 +117,7 @@ void app_main(void)
         display_text(0, 1, "Pass: irrig..123", false);
         display_text(0, 2, "IP: 192.168.4.1 ", false);
         display_text(0, 3, "Token:          ", false);
-        // Pokaż skrócony token (pierwsze 12 znaków)
-        char token_short[17] = {0};
-        strncpy(token_short, g_config.api_token, 12);
-        display_text(0, 4, token_short, false);
+        display_text(0, 4, g_config.api_token, false);
     }
 
     // ------------------------------------------------------------------

@@ -5,6 +5,7 @@
 #include "rtc/rtc.h"
 #include "wifi/wifi_manager.h"
 #include "encoder/encoder.h"
+#include "storage/nvs_storage.h"
 #include "config.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -15,6 +16,8 @@
 #include <time.h>
 
 static const char *TAG = "menu";
+
+extern app_config_t g_config;
 
 static menu_screen_t s_screen     = MENU_SCREEN_HOME;
 static int           s_cursor     = 0;
@@ -155,7 +158,9 @@ static void draw_info(void)
              (unsigned long)((uptime % 3600) / 60));
     display_text_full(4, buf, false);
 
-    display_text_full(5, "", false);
+    char tokbuf[20] = "Token:";
+    strncat(tokbuf, g_config.api_token, sizeof(tokbuf) - 7);
+    display_text_full(5, tokbuf, false);
     display_text_full(6, "", false);
     display_text_full(7, "LNG=wyjdz", false);
 }

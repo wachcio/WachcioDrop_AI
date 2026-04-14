@@ -285,27 +285,76 @@ export default function SettingsPage() {
         )}
 
         {tab === 'token' && (
-          <div className="flex flex-col gap-4">
-            <p className="text-sm text-gray-600">
-              Token API jest przechowywany tylko w tej przeglądarce.
-              Możesz go odczytać na wyświetlaczu OLED urządzenia.
-            </p>
-            <Field label="Token Bearer">
-              <input
-                value={localToken}
-                onChange={e => setLocalToken(e.target.value)}
-                placeholder="wklej token z OLED…"
-                className={inputCls}
-              />
-            </Field>
-            <button
-              onClick={saveToken}
-              className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white
-                px-4 py-2.5 rounded-xl text-sm font-medium transition-colors w-fit"
-            >
-              <Save size={15} />
-              Zapisz token lokalnie
-            </button>
+          <div className="flex flex-col gap-5">
+
+            {/* Połącz przeglądarkę z urządzeniem */}
+            <div className="flex flex-col gap-3">
+              <p className="text-sm text-gray-600">
+                Odczytaj token z wyświetlacza OLED urządzenia i wpisz go poniżej.
+                Token zostanie zapisany tylko w tej przeglądarce — nie wymaga połączenia z urządzeniem.
+              </p>
+              <Field label="Token z OLED">
+                <input
+                  value={localToken}
+                  onChange={e => setLocalToken(e.target.value)}
+                  placeholder="wklej token z OLED…"
+                  className={inputCls}
+                />
+              </Field>
+              <button
+                onClick={() => {
+                  if (!localToken.trim()) { toast.error('Token nie może być pusty'); return }
+                  setToken(localToken.trim())
+                  toast.success('Token zapisany — przeglądarka połączona z urządzeniem')
+                }}
+                className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white
+                  px-4 py-2.5 rounded-xl text-sm font-medium transition-colors w-fit"
+              >
+                <Save size={15} />
+                Połącz z urządzeniem
+              </button>
+            </div>
+
+            <div className="border-t border-gray-100" />
+
+            {/* Zmień token na urządzeniu (wymaga autoryzacji) */}
+            <div className="flex flex-col gap-3">
+              <p className="text-sm text-gray-600">
+                Aby zmienić token zapisany na urządzeniu, musisz być już połączony (powyżej).
+                Po zmianie tokenu przeglądarka zostanie automatycznie zaktualizowana.
+              </p>
+              <Field label="Nowy token (pozostaw puste = bez zmian)">
+                <input
+                  value={pass.token}
+                  onChange={e => setPass(p => ({ ...p, token: e.target.value }))}
+                  placeholder="nowy token…"
+                  className={inputCls}
+                />
+              </Field>
+              <button
+                onClick={async () => {
+                  if (!pass.token.trim()) { toast.error('Wpisz nowy token'); return }
+                  setSaving(true)
+                  try {
+                    await apiSaveSettings({ api_token: pass.token.trim() } as any)
+                    setToken(pass.token.trim())
+                    setLocalToken(pass.token.trim())
+                    setPass(p => ({ ...p, token: '' }))
+                    toast.success('Token zmieniony na urządzeniu i zaktualizowany w przeglądarce')
+                  } catch {
+                    toast.error('Błąd — sprawdź czy przeglądarka jest połączona z urządzeniem')
+                  }
+                  setSaving(false)
+                }}
+                disabled={saving}
+                className="flex items-center gap-2 bg-gray-700 hover:bg-gray-800 text-white
+                  px-4 py-2.5 rounded-xl text-sm font-medium transition-colors w-fit disabled:opacity-50"
+              >
+                <KeyRound size={15} />
+                {saving ? 'Zapisywanie…' : 'Zmień token na urządzeniu'}
+              </button>
+            </div>
+
           </div>
         )}
 
