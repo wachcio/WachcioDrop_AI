@@ -61,7 +61,7 @@ export default function About() {
       <div className="bg-green-800 rounded-2xl p-6 text-white flex flex-col items-center gap-2 text-center">
         <span className="text-5xl">💧</span>
         <h1 className="text-2xl font-bold">WachcioDrop</h1>
-        <p className="text-green-300 text-sm">Sterownik nawadniania ogrodu</p>
+        <p className="text-green-300 text-sm">Zaawansowany sterownik nawadniania ogrodu</p>
         {info && (
           <span className="mt-1 px-3 py-1 bg-white/15 rounded-full text-xs font-medium">
             v{info.fw_version}

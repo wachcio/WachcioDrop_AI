@@ -20,5 +20,8 @@ int          wifi_get_rssi(void);
 // Wymusz przejście w AP mode (np. z menu)
 void wifi_force_ap_mode(void);
 
+// Wyzwól próbę ponownego połączenia STA (np. po zapisie ustawień WiFi)
+void wifi_trigger_reconnect(void);
+
 // Task zarządzający połączeniem
 void wifi_manager_task(void *arg);

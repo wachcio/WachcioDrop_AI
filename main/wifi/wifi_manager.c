@@ -24,8 +24,9 @@ static EventGroupHandle_t s_wifi_event_group;
 static wifi_state_t       s_state        = WIFI_STATE_UNCONFIGURED;
 static int                s_retries      = 0;
 static char               s_ip[16]       = "0.0.0.0";
-static bool               s_force_ap     = false;
-static bool               s_boot_logged  = false; // czy wysłano log startowy
+static bool               s_force_ap        = false;
+static bool               s_reconnect_req   = false; // żądanie reconnect z API
+static bool               s_boot_logged     = false; // czy wysłano log startowy
 
 extern app_config_t g_config;
 
@@ -115,7 +116,8 @@ int wifi_get_rssi(void)
     return 0;
 }
 
-void wifi_force_ap_mode(void) { s_force_ap = true; }
+void wifi_force_ap_mode(void)    { s_force_ap      = true; }
+void wifi_trigger_reconnect(void){ s_reconnect_req  = true; }
 
 void wifi_manager_task(void *arg)
 {
@@ -143,6 +145,9 @@ void wifi_manager_task(void *arg)
         start_sta(cfg->wifi_ssid, cfg->wifi_pass);
     }
 
+    // Licznik tików dla periodycznego retry (1 tik = 1s, retry co 60s)
+    uint32_t ap_retry_ticks = 0;
+
     while (1) {
         // Migaj LED gdy brak połączenia STA, świeć ciągłe gdy połączone
         if (s_state != WIFI_STATE_CONNECTED) {
@@ -150,8 +155,10 @@ void wifi_manager_task(void *arg)
             vTaskDelay(pdMS_TO_TICKS(500));
             leds_set_bit(BIT_LED_WIFI, false);
             vTaskDelay(pdMS_TO_TICKS(500));
+            ap_retry_ticks++;
         } else {
             vTaskDelay(pdMS_TO_TICKS(5000));
+            ap_retry_ticks = 0;
             // Sprawdź czy STA nadal połączone
             wifi_ap_record_t ap;
             if (esp_wifi_sta_get_ap_info(&ap) != ESP_OK) {
@@ -173,10 +180,40 @@ void wifi_manager_task(void *arg)
             ESP_LOGI(TAG, "new WiFi config, connecting STA to '%s'", cfg->wifi_ssid);
             s_state   = WIFI_STATE_CONNECTING;
             s_retries = 0;
+            ap_retry_ticks = 0;
             leds_set_bit(BIT_LED_WIFI, false);
             xEventGroupClearBits(s_wifi_event_group,
                                  WIFI_CONNECTED_BIT | WIFI_FAIL_BIT);
             // Rozłącz poprzednie połączenie STA jeśli było
+            esp_wifi_disconnect();
+            vTaskDelay(pdMS_TO_TICKS(200));
+            start_sta(cfg->wifi_ssid, cfg->wifi_pass);
+        }
+
+        // Reconnect na żądanie z API (po zapisaniu ustawień WiFi)
+        if (s_reconnect_req && cfg->wifi_ssid[0] != '\0') {
+            s_reconnect_req = false;
+            ESP_LOGI(TAG, "reconnect requested, connecting to '%s'", cfg->wifi_ssid);
+            s_state   = WIFI_STATE_CONNECTING;
+            s_retries = 0;
+            ap_retry_ticks = 0;
+            leds_set_bit(BIT_LED_WIFI, false);
+            xEventGroupClearBits(s_wifi_event_group,
+                                 WIFI_CONNECTED_BIT | WIFI_FAIL_BIT);
+            esp_wifi_disconnect();
+            vTaskDelay(pdMS_TO_TICKS(200));
+            start_sta(cfg->wifi_ssid, cfg->wifi_pass);
+        }
+
+        // Periodyczny retry co 60s gdy SSID jest ustawione ale brak połączenia
+        if (s_state == WIFI_STATE_AP_MODE && cfg->wifi_ssid[0] != '\0'
+                && ap_retry_ticks >= 60) {
+            ap_retry_ticks = 0;
+            ESP_LOGI(TAG, "periodic retry, connecting to '%s'", cfg->wifi_ssid);
+            s_state   = WIFI_STATE_CONNECTING;
+            s_retries = 0;
+            xEventGroupClearBits(s_wifi_event_group,
+                                 WIFI_CONNECTED_BIT | WIFI_FAIL_BIT);
             esp_wifi_disconnect();
             vTaskDelay(pdMS_TO_TICKS(200));
             start_sta(cfg->wifi_ssid, cfg->wifi_pass);

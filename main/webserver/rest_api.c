@@ -595,12 +595,19 @@ static esp_err_t handle_settings_post(httpd_req_t *req)
     }
 
     cJSON *v;
+    bool wifi_changed = false;
     #define COPY_STR(key, field) \
         if ((v = cJSON_GetObjectItem(j, key)) && v->valuestring) \
             strncpy(g_config.field, v->valuestring, sizeof(g_config.field) - 1)
 
-    COPY_STR("wifi_ssid",  wifi_ssid);
-    COPY_STR("wifi_pass",  wifi_pass);
+    if ((v = cJSON_GetObjectItem(j, "wifi_ssid")) && v->valuestring) {
+        strncpy(g_config.wifi_ssid, v->valuestring, sizeof(g_config.wifi_ssid) - 1);
+        wifi_changed = true;
+    }
+    if ((v = cJSON_GetObjectItem(j, "wifi_pass")) && v->valuestring) {
+        strncpy(g_config.wifi_pass, v->valuestring, sizeof(g_config.wifi_pass) - 1);
+        wifi_changed = true;
+    }
     COPY_STR("mqtt_uri",   mqtt_uri);
     COPY_STR("mqtt_user",  mqtt_user);
     COPY_STR("mqtt_pass",  mqtt_pass);
@@ -628,6 +635,8 @@ static esp_err_t handle_settings_post(httpd_req_t *req)
     cJSON_Delete(j);
     storage_save_config(&g_config);
     APP_LOGI("api", "Settings saved");
+    if (wifi_changed && g_config.wifi_ssid[0] != '\0')
+        wifi_trigger_reconnect();
     JSON_RESP(req, "{\"ok\":true}");
     return ESP_OK;
 }
