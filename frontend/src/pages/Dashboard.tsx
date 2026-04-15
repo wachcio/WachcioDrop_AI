@@ -70,8 +70,8 @@ function SectionCard({
       className={`relative flex flex-col items-center gap-2 rounded-2xl p-4 w-full
         transition-all duration-200 active:scale-95 select-none
         ${active
-          ? 'bg-green-500 text-white shadow-lg shadow-green-200'
-          : 'bg-white text-gray-600 shadow-sm border border-gray-100 hover:border-green-200'}`}
+          ? 'bg-green-500 text-white shadow-lg shadow-green-200 hover:bg-green-400'
+          : 'bg-white text-gray-600 shadow-sm border border-gray-100 hover:bg-green-50 hover:border-green-200'}`}
     >
       {/* Pulsujący ring gdy aktywna */}
       {active && (
@@ -114,8 +114,8 @@ function GroupCard({
         ${empty
           ? 'bg-gray-50 text-gray-300 border border-dashed border-gray-200 cursor-not-allowed'
           : active
-            ? 'bg-blue-500 text-white shadow-lg shadow-blue-200'
-            : 'bg-white text-gray-700 shadow-sm border border-gray-100 hover:border-blue-200'}`}
+            ? 'bg-blue-500 text-white shadow-lg shadow-blue-200 hover:bg-blue-400'
+            : 'bg-white text-gray-700 shadow-sm border border-gray-100 hover:bg-blue-50 hover:border-blue-200'}`}
     >
       {active && (
         <span className="absolute inset-0 rounded-2xl bg-blue-400 opacity-20 animate-pulse" />
