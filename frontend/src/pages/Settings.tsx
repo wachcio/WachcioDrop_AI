@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
-import { KeyRound, Wifi, Radio, Globe, Clock, Save, RefreshCw, SlidersHorizontal, Droplets, CloudOff, Antenna, Upload, AlertTriangle, CheckCircle, XCircle } from 'lucide-react'
-import { apiGetSettings, apiSaveSettings, apiGetTime, apiSetDateTime, apiGetStatus, apiSetIrrigation, apiSyncNtp, apiOtaUpload, apiSpiffsUpload, apiRestart, api, Settings, setToken, SystemStatus } from '../api/client'
+import { KeyRound, Wifi, Radio, Globe, Clock, Save, RefreshCw, SlidersHorizontal, Droplets, CloudOff, Antenna, Upload, AlertTriangle, CheckCircle, XCircle, Download, ArchiveRestore } from 'lucide-react'
+import { apiGetSettings, apiSaveSettings, apiGetTime, apiSetDateTime, apiGetStatus, apiSetIrrigation, apiSyncNtp, apiOtaUpload, apiSpiffsUpload, apiRestart, apiExportSettings, apiImportSettings, api, Settings, setToken, SystemStatus } from '../api/client'
 
 export type ScheduleMode = 'sections' | 'groups'
 export const SCHEDULE_MODE_KEY = 'schedule_mode'
@@ -9,7 +9,7 @@ export function getScheduleMode(): ScheduleMode {
   return (localStorage.getItem(SCHEDULE_MODE_KEY) as ScheduleMode) ?? 'sections'
 }
 
-type Tab = 'glowne' | 'token' | 'wifi' | 'mqtt' | 'uslugi' | 'czas' | 'ota'
+type Tab = 'glowne' | 'token' | 'wifi' | 'mqtt' | 'uslugi' | 'czas' | 'ota' | 'backup'
 
 const TABS: { id: Tab; icon: typeof KeyRound; label: string }[] = [
   { id: 'glowne', icon: SlidersHorizontal, label: 'Główne' },
@@ -19,6 +19,7 @@ const TABS: { id: Tab; icon: typeof KeyRound; label: string }[] = [
   { id: 'uslugi', icon: Globe,             label: 'Usługi' },
   { id: 'czas',   icon: Clock,             label: 'Czas'   },
   { id: 'ota',    icon: Upload,            label: 'OTA'    },
+  { id: 'backup', icon: Download,          label: 'Backup' },
 ]
 
 function Field({
@@ -292,9 +293,71 @@ export default function SettingsPage() {
       setSpiffsStatus('rebooting')
       toast.success('Urządzenie restartuje się')
     } catch {
-      // ignoruj błąd połączenia — urządzenie już się restartuje
       setSpiffsStatus('rebooting')
     }
+  }
+
+  // --- Backup / Restore ---
+  const [importFile, setImportFile]     = useState<File | null>(null)
+  const [importPreview, setImportPreview] = useState<any | null>(null)
+  const [importError, setImportError]   = useState('')
+  const [importing, setImporting]       = useState(false)
+  const [exporting, setExporting]       = useState(false)
+
+  const doExport = async () => {
+    setExporting(true)
+    try {
+      const resp = await apiExportSettings()
+      const text = await (resp.data as Blob).text()
+      const blob = new Blob([text], { type: 'application/json' })
+      const url  = URL.createObjectURL(blob)
+      const a    = document.createElement('a')
+      const date = new Date().toISOString().slice(0, 10)
+      a.href     = url
+      a.download = `wachciodrop_backup_${date}.json`
+      a.click()
+      URL.revokeObjectURL(url)
+      toast.success('Backup pobrany')
+    } catch {
+      toast.error('Błąd eksportu')
+    }
+    setExporting(false)
+  }
+
+  const onImportFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0] ?? null
+    setImportFile(file)
+    setImportPreview(null)
+    setImportError('')
+    if (!file) return
+    try {
+      const text = await file.text()
+      const data = JSON.parse(text)
+      if (!data.config && !data.schedule && !data.groups) {
+        setImportError('Nieprawidłowy format pliku — brak sekcji config/schedule/groups')
+        return
+      }
+      setImportPreview(data)
+    } catch {
+      setImportError('Błąd parsowania JSON — uszkodzony plik')
+    }
+  }
+
+  const doImport = async () => {
+    if (!importPreview) return
+    setImporting(true)
+    try {
+      await apiImportSettings(importPreview)
+      toast.success('Ustawienia przywrócone')
+      setImportFile(null)
+      setImportPreview(null)
+      // Odśwież dane
+      apiGetSettings().then(r => setCfg(r.data)).catch(() => {})
+      apiGetStatus().then(r => setDevStatus(r.data)).catch(() => {})
+    } catch {
+      toast.error('Błąd importu')
+    }
+    setImporting(false)
   }
 
   return (
@@ -832,6 +895,92 @@ export default function SettingsPage() {
                 Wgraj oba (SPIFFS → firmware + restart)
               </button>
             )}
+
+          </div>
+        )}
+
+        {tab === 'backup' && (
+          <div className="flex flex-col gap-5">
+
+            {/* Export */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex flex-col gap-3">
+              <h3 className="text-sm font-semibold text-gray-700">Eksport ustawień</h3>
+              <p className="text-xs text-gray-500">
+                Pobiera plik JSON zawierający wszystkie ustawienia urządzenia:
+                konfigurację WiFi, MQTT, PHP, harmonogram i grupy.
+                Hasła są zapisane w pliku — przechowuj go bezpiecznie.
+              </p>
+              <button
+                onClick={doExport}
+                disabled={exporting}
+                className="flex items-center gap-2 bg-green-700 hover:bg-green-800 disabled:opacity-50
+                  text-white px-4 py-2.5 rounded-xl text-sm font-medium transition-colors w-fit"
+              >
+                <Download size={15} />
+                {exporting ? 'Pobieranie…' : 'Pobierz backup (.json)'}
+              </button>
+            </div>
+
+            {/* Import */}
+            <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex flex-col gap-3">
+              <h3 className="text-sm font-semibold text-gray-700">Import ustawień</h3>
+              <p className="text-xs text-gray-500">
+                Wczytaj wcześniej pobrany plik backup. Zastąpi wszystkie ustawienia urządzenia.
+              </p>
+
+              <input
+                type="file"
+                accept=".json"
+                onChange={onImportFileChange}
+                className={inputCls}
+              />
+
+              {importError && (
+                <div className="flex items-center gap-2 p-3 bg-red-50 border border-red-100 rounded-xl">
+                  <XCircle size={16} className="text-red-500 shrink-0" />
+                  <p className="text-xs text-red-700">{importError}</p>
+                </div>
+              )}
+
+              {importPreview && !importError && (
+                <div className="flex flex-col gap-2 p-3 bg-blue-50 border border-blue-100 rounded-xl text-xs text-blue-800">
+                  <p className="font-semibold">Zawartość pliku:</p>
+                  {importPreview.config && (
+                    <p>WiFi: <span className="font-mono">{importPreview.config.wifi_ssid || '(brak)'}</span>
+                      {importPreview.config.mqtt_uri ? ` · MQTT: ${importPreview.config.mqtt_uri}` : ''}</p>
+                  )}
+                  {importPreview.schedule && (
+                    <p>Harmonogram: {importPreview.schedule.filter((e: any) => e.enabled).length} aktywnych wpisów
+                      z {importPreview.schedule.length}</p>
+                  )}
+                  {importPreview.groups && (
+                    <p>Grupy: {importPreview.groups.filter((g: any) => g.section_mask > 0).length} skonfigurowanych
+                      z {importPreview.groups.length}</p>
+                  )}
+                </div>
+              )}
+
+              {importPreview && !importError && (
+                <div className="flex items-start gap-3 p-3 bg-orange-50 border border-orange-100 rounded-xl">
+                  <AlertTriangle size={16} className="text-orange-500 shrink-0 mt-0.5" />
+                  <p className="text-xs text-orange-700">
+                    Import nadpisze wszystkie aktualne ustawienia urządzenia. Tej operacji nie można cofnąć.
+                  </p>
+                </div>
+              )}
+
+              {importPreview && !importError && (
+                <button
+                  onClick={doImport}
+                  disabled={importing}
+                  className="flex items-center gap-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-50
+                    text-white px-4 py-2.5 rounded-xl text-sm font-medium transition-colors w-fit"
+                >
+                  <ArchiveRestore size={15} />
+                  {importing ? 'Przywracanie…' : 'Przywróć ustawienia'}
+                </button>
+              )}
+            </div>
 
           </div>
         )}

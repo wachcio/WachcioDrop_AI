@@ -167,3 +167,9 @@ export const apiSpiffsUpload = (
 })
 
 export const apiRestart = () => api.post('/api/restart')
+
+export const apiExportSettings = () =>
+  api.get('/api/settings/export', { responseType: 'blob' })
+
+export const apiImportSettings = (data: object) =>
+  api.put('/api/settings/import', data)
