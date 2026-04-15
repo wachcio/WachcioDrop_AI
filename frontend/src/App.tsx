@@ -23,11 +23,11 @@ export default function App() {
       <div className="min-h-screen bg-gray-50 flex flex-col">
 
         {/* Header */}
-        <header className="bg-green-800 text-white px-4 py-3 flex items-center gap-3 shadow-md">
-          <span className="text-2xl">💧</span>
+        <header className="bg-green-800 text-white px-4 py-2.5 flex items-center gap-3 shadow-md">
+          <img src="/logo.png" alt="WachcioDrop" className="w-10 h-10 object-contain shrink-0" />
           <div>
             <h1 className="text-lg font-bold leading-none">WachcioDrop</h1>
-            <p className="text-green-300 text-xs">Sterownik nawadniania</p>
+            <p className="text-green-300 text-xs">Zaawansowany sterownik nawadniania ogrodu</p>
           </div>
         </header>
 

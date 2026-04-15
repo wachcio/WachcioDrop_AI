@@ -59,7 +59,7 @@ export default function About() {
 
       {/* Hero */}
       <div className="bg-green-800 rounded-2xl p-6 text-white flex flex-col items-center gap-2 text-center">
-        <span className="text-5xl">💧</span>
+        <img src="/logo.png" alt="WachcioDrop" className="w-20 h-20 object-contain" />
         <h1 className="text-2xl font-bold">WachcioDrop</h1>
         <p className="text-green-300 text-sm">Zaawansowany sterownik nawadniania ogrodu</p>
         {info && (
