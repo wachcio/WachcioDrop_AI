@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
 import { KeyRound, Wifi, Radio, Globe, Clock, Save, RefreshCw, SlidersHorizontal, Droplets, CloudOff, Antenna, Upload, AlertTriangle, CheckCircle, XCircle, Download, ArchiveRestore, Thermometer } from 'lucide-react'
 import { apiGetSettings, apiSaveSettings, apiGetTime, apiSetDateTime, apiGetStatus, apiSetIrrigation, apiSyncNtp, apiOtaUpload, apiSpiffsUpload, apiRestart, apiExportSettings, apiImportSettings, api, Settings, setToken, SystemStatus } from '../api/client'
+import { Tooltip } from '../components/Tooltip'
 
 export type ScheduleMode = 'sections' | 'groups'
 export const SCHEDULE_MODE_KEY = 'schedule_mode'
@@ -11,15 +12,15 @@ export function getScheduleMode(): ScheduleMode {
 
 type Tab = 'glowne' | 'token' | 'wifi' | 'mqtt' | 'uslugi' | 'czas' | 'ota' | 'backup'
 
-const TABS: { id: Tab; icon: typeof KeyRound; label: string }[] = [
-  { id: 'glowne', icon: SlidersHorizontal, label: 'Główne' },
-  { id: 'token',  icon: KeyRound,          label: 'Token'  },
-  { id: 'wifi',   icon: Wifi,              label: 'WiFi'   },
-  { id: 'mqtt',   icon: Radio,             label: 'MQTT'   },
-  { id: 'uslugi', icon: Globe,             label: 'Usługi' },
-  { id: 'czas',   icon: Clock,             label: 'Czas'   },
-  { id: 'ota',    icon: Upload,            label: 'OTA'    },
-  { id: 'backup', icon: Download,          label: 'Backup' },
+const TABS: { id: Tab; icon: typeof KeyRound; label: string; tip: string }[] = [
+  { id: 'glowne', icon: SlidersHorizontal, label: 'Główne',  tip: 'Nawadnianie, ochrona przed mrozem, tryb harmonogramu' },
+  { id: 'token',  icon: KeyRound,          label: 'Token',   tip: 'Token autoryzacji API' },
+  { id: 'wifi',   icon: Wifi,              label: 'WiFi',    tip: 'Połączenie z siecią WiFi' },
+  { id: 'mqtt',   icon: Radio,             label: 'MQTT',    tip: 'Broker MQTT do integracji zewnętrznych' },
+  { id: 'uslugi', icon: Globe,             label: 'Usługi',  tip: 'Skrypt zewnętrzny, NTP, Graylog' },
+  { id: 'czas',   icon: Clock,             label: 'Czas',    tip: 'Synchronizacja czasu RTC' },
+  { id: 'ota',    icon: Upload,            label: 'OTA',     tip: 'Aktualizacja firmware i interfejsu przez WiFi' },
+  { id: 'backup', icon: Download,          label: 'Backup',  tip: 'Eksport i import ustawień urządzenia' },
 ]
 
 function Field({
@@ -366,19 +367,20 @@ export default function SettingsPage() {
 
       {/* Tab bar */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-1 flex gap-1">
-        {TABS.map(({ id, icon: Icon, label }) => (
-          <button
-            key={id}
-            onClick={() => setTab(id)}
-            className={`flex-1 flex flex-col sm:flex-row items-center justify-center gap-1
-              py-2 px-1 rounded-xl text-xs font-medium transition-colors
-              ${tab === id
-                ? 'bg-green-600 text-white shadow-sm'
-                : 'text-gray-500 hover:bg-gray-50'}`}
-          >
-            <Icon size={15} />
-            <span className="hidden sm:block">{label}</span>
-          </button>
+        {TABS.map(({ id, icon: Icon, label, tip }) => (
+          <Tooltip key={id} text={tip} pos="bottom">
+            <button
+              onClick={() => setTab(id)}
+              className={`flex-1 flex flex-col sm:flex-row items-center justify-center gap-1
+                py-2 px-1 rounded-xl text-xs font-medium transition-colors
+                ${tab === id
+                  ? 'bg-green-600 text-white shadow-sm'
+                  : 'text-gray-500 hover:bg-gray-50'}`}
+            >
+              <Icon size={15} />
+              <span className="hidden sm:block">{label}</span>
+            </button>
+          </Tooltip>
         ))}
       </div>
 
@@ -403,20 +405,22 @@ export default function SettingsPage() {
                     </p>
                   </div>
                 </div>
-                <button
-                  onClick={async () => {
-                    try {
-                      await apiSetIrrigation(!devStatus.irrigation_today, undefined)
-                      toast.success(devStatus.irrigation_today ? 'Nawadnianie zablokowane' : 'Nawadnianie aktywowane')
-                      apiGetStatus().then(r => setDevStatus(r.data)).catch(() => {})
-                    } catch { toast.error('Błąd') }
-                  }}
-                  className={`relative inline-flex w-12 h-6 rounded-full transition-colors shrink-0
-                    ${devStatus.irrigation_today ? 'bg-green-500' : 'bg-gray-300'}`}
-                >
-                  <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow
-                    transition-transform ${devStatus.irrigation_today ? 'translate-x-6' : ''}`} />
-                </button>
+                <Tooltip text={devStatus.irrigation_today ? 'Kliknij aby zablokować nawadnianie dziś' : 'Kliknij aby aktywować nawadnianie dziś'}>
+                  <button
+                    onClick={async () => {
+                      try {
+                        await apiSetIrrigation(!devStatus.irrigation_today, undefined)
+                        toast.success(devStatus.irrigation_today ? 'Nawadnianie zablokowane' : 'Nawadnianie aktywowane')
+                        apiGetStatus().then(r => setDevStatus(r.data)).catch(() => {})
+                      } catch { toast.error('Błąd') }
+                    }}
+                    className={`relative inline-flex w-12 h-6 rounded-full transition-colors shrink-0
+                      ${devStatus.irrigation_today ? 'bg-green-500' : 'bg-gray-300'}`}
+                  >
+                    <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow
+                      transition-transform ${devStatus.irrigation_today ? 'translate-x-6' : ''}`} />
+                  </button>
+                </Tooltip>
               </div>
             )}
 
@@ -437,14 +441,16 @@ export default function SettingsPage() {
                     </p>
                   </div>
                 </div>
-                <button
-                  onClick={() => setCfg(c => ({ ...c, frost_protection_enabled: !c.frost_protection_enabled }))}
-                  className={`relative inline-flex w-12 h-6 rounded-full transition-colors shrink-0
-                    ${cfg.frost_protection_enabled ? 'bg-blue-500' : 'bg-gray-300'}`}
-                >
-                  <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow
-                    transition-transform ${cfg.frost_protection_enabled ? 'translate-x-6' : ''}`} />
-                </button>
+                <Tooltip text={cfg.frost_protection_enabled ? 'Wyłącz ochronę przed mrozem' : 'Włącz ochronę przed mrozem'}>
+                  <button
+                    onClick={() => setCfg(c => ({ ...c, frost_protection_enabled: !c.frost_protection_enabled }))}
+                    className={`relative inline-flex w-12 h-6 rounded-full transition-colors shrink-0
+                      ${cfg.frost_protection_enabled ? 'bg-blue-500' : 'bg-gray-300'}`}
+                  >
+                    <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow
+                      transition-transform ${cfg.frost_protection_enabled ? 'translate-x-6' : ''}`} />
+                  </button>
+                </Tooltip>
               </div>
 
               {cfg.frost_protection_enabled && (
@@ -454,21 +460,27 @@ export default function SettingsPage() {
                       Próg temperatury:
                     </label>
                     <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setCfg(c => ({ ...c, frost_temp_threshold: c.frost_temp_threshold - 1 }))}
-                        className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 active:scale-90
-                          flex items-center justify-center text-gray-600 font-bold text-lg leading-none
-                          transition-all select-none"
-                      >−</button>
-                      <span className="text-base font-bold text-blue-700 w-16 text-center">
-                        {cfg.frost_temp_threshold} °C
-                      </span>
-                      <button
-                        onClick={() => setCfg(c => ({ ...c, frost_temp_threshold: c.frost_temp_threshold + 1 }))}
-                        className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 active:scale-90
-                          flex items-center justify-center text-gray-600 font-bold text-lg leading-none
-                          transition-all select-none"
-                      >+</button>
+                      <Tooltip text="Obniż próg o 1°C">
+                        <button
+                          onClick={() => setCfg(c => ({ ...c, frost_temp_threshold: c.frost_temp_threshold - 1 }))}
+                          className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 active:scale-90
+                            flex items-center justify-center text-gray-600 font-bold text-lg leading-none
+                            transition-all select-none"
+                        >−</button>
+                      </Tooltip>
+                      <Tooltip text={`Nawadnianie wyłączy się gdy temp. spadnie poniżej ${cfg.frost_temp_threshold}°C`}>
+                        <span className="text-base font-bold text-blue-700 w-16 text-center block cursor-default">
+                          {cfg.frost_temp_threshold} °C
+                        </span>
+                      </Tooltip>
+                      <Tooltip text="Podnieś próg o 1°C">
+                        <button
+                          onClick={() => setCfg(c => ({ ...c, frost_temp_threshold: c.frost_temp_threshold + 1 }))}
+                          className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 active:scale-90
+                            flex items-center justify-center text-gray-600 font-bold text-lg leading-none
+                            transition-all select-none"
+                        >+</button>
+                      </Tooltip>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
@@ -476,21 +488,27 @@ export default function SettingsPage() {
                       Opóźnienie reaktywacji:
                     </label>
                     <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setCfg(c => ({ ...c, frost_recovery_delay_min: Math.max(1, c.frost_recovery_delay_min - 5) }))}
-                        className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 active:scale-90
-                          flex items-center justify-center text-gray-600 font-bold text-lg leading-none
-                          transition-all select-none"
-                      >−</button>
-                      <span className="text-base font-bold text-blue-700 w-16 text-center">
-                        {cfg.frost_recovery_delay_min} min
-                      </span>
-                      <button
-                        onClick={() => setCfg(c => ({ ...c, frost_recovery_delay_min: c.frost_recovery_delay_min + 5 }))}
-                        className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 active:scale-90
-                          flex items-center justify-center text-gray-600 font-bold text-lg leading-none
-                          transition-all select-none"
-                      >+</button>
+                      <Tooltip text="Skróć opóźnienie o 5 minut">
+                        <button
+                          onClick={() => setCfg(c => ({ ...c, frost_recovery_delay_min: Math.max(1, c.frost_recovery_delay_min - 5) }))}
+                          className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 active:scale-90
+                            flex items-center justify-center text-gray-600 font-bold text-lg leading-none
+                            transition-all select-none"
+                        >−</button>
+                      </Tooltip>
+                      <Tooltip text={`Nawadnianie reaktywuje się ${cfg.frost_recovery_delay_min} min po wzroście temp. powyżej progu`}>
+                        <span className="text-base font-bold text-blue-700 w-16 text-center block cursor-default">
+                          {cfg.frost_recovery_delay_min} min
+                        </span>
+                      </Tooltip>
+                      <Tooltip text="Wydłuż opóźnienie o 5 minut">
+                        <button
+                          onClick={() => setCfg(c => ({ ...c, frost_recovery_delay_min: c.frost_recovery_delay_min + 5 }))}
+                          className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 active:scale-90
+                            flex items-center justify-center text-gray-600 font-bold text-lg leading-none
+                            transition-all select-none"
+                        >+</button>
+                      </Tooltip>
                     </div>
                     <span className="text-xs text-gray-400">po wzroście powyżej progu</span>
                   </div>
@@ -513,17 +531,19 @@ export default function SettingsPage() {
                 <span className={`text-xs font-medium ${scheduleMode === 'sections' ? 'text-green-700' : 'text-gray-400'}`}>
                   Sekcje
                 </span>
-                <button
-                  onClick={() => {
-                    const next: ScheduleMode = scheduleMode === 'sections' ? 'groups' : 'sections'
-                    setPendingMode(next)
-                  }}
-                  className={`relative inline-flex w-12 h-6 rounded-full transition-colors shrink-0
-                    ${scheduleMode === 'groups' ? 'bg-blue-500' : 'bg-green-500'}`}
-                >
-                  <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow
-                    transition-transform ${scheduleMode === 'groups' ? 'translate-x-6' : ''}`} />
-                </button>
+                <Tooltip text={scheduleMode === 'sections' ? 'Przełącz na tryb grup' : 'Przełącz na tryb sekcji'}>
+                  <button
+                    onClick={() => {
+                      const next: ScheduleMode = scheduleMode === 'sections' ? 'groups' : 'sections'
+                      setPendingMode(next)
+                    }}
+                    className={`relative inline-flex w-12 h-6 rounded-full transition-colors shrink-0
+                      ${scheduleMode === 'groups' ? 'bg-blue-500' : 'bg-green-500'}`}
+                  >
+                    <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow
+                      transition-transform ${scheduleMode === 'groups' ? 'translate-x-6' : ''}`} />
+                  </button>
+                </Tooltip>
                 <span className={`text-xs font-medium ${scheduleMode === 'groups' ? 'text-blue-600' : 'text-gray-400'}`}>
                   Grupy
                 </span>
@@ -532,15 +552,17 @@ export default function SettingsPage() {
 
             <div className="border-t border-gray-100" />
 
-            <button
-              onClick={save}
-              disabled={saving}
-              className="flex items-center gap-2 bg-green-600 hover:bg-green-700 disabled:opacity-50
-                text-white px-4 py-2.5 rounded-xl text-sm font-medium transition-colors w-fit"
-            >
-              <Save size={15} />
-              {saving ? 'Zapisywanie…' : 'Zapisz ustawienia'}
-            </button>
+            <Tooltip text="Zapisz wszystkie ustawienia z tej zakładki na urządzeniu">
+              <button
+                onClick={save}
+                disabled={saving}
+                className="flex items-center gap-2 bg-green-600 hover:bg-green-700 disabled:opacity-50
+                  text-white px-4 py-2.5 rounded-xl text-sm font-medium transition-colors w-fit"
+              >
+                <Save size={15} />
+                {saving ? 'Zapisywanie…' : 'Zapisz ustawienia'}
+              </button>
+            </Tooltip>
 
           </div>
         )}
@@ -562,18 +584,20 @@ export default function SettingsPage() {
                   className={inputCls}
                 />
               </Field>
-              <button
-                onClick={() => {
-                  if (!localToken.trim()) { toast.error('Token nie może być pusty'); return }
-                  setToken(localToken.trim())
-                  toast.success('Token zapisany — przeglądarka połączona z urządzeniem')
-                }}
-                className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white
-                  px-4 py-2.5 rounded-xl text-sm font-medium transition-colors w-fit"
-              >
-                <Save size={15} />
-                Połącz z urządzeniem
-              </button>
+              <Tooltip text="Zapisz token w przeglądarce i połącz z urządzeniem">
+                <button
+                  onClick={() => {
+                    if (!localToken.trim()) { toast.error('Token nie może być pusty'); return }
+                    setToken(localToken.trim())
+                    toast.success('Token zapisany — przeglądarka połączona z urządzeniem')
+                  }}
+                  className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white
+                    px-4 py-2.5 rounded-xl text-sm font-medium transition-colors w-fit"
+                >
+                  <Save size={15} />
+                  Połącz z urządzeniem
+                </button>
+              </Tooltip>
             </div>
 
             <div className="border-t border-gray-100" />
@@ -619,29 +643,31 @@ export default function SettingsPage() {
                       <p className="text-xs text-gray-400 mt-1">{pass.token.length} / {TOKEN_LEN}</p>
                     )}
                   </Field>
-                  <button
-                    onClick={async () => {
-                      if (!tokenValid) { toast.error('Token musi mieć 10 znaków hex (0-9, a-f)'); return }
-                      setSaving(true)
-                      try {
-                        await apiSaveSettings({ api_token: pass.token } as any)
-                        setToken(pass.token)
-                        setLocalToken(pass.token)
-                        setPass(p => ({ ...p, token: '' }))
-                        toast.success('Token zmieniony na urządzeniu i zaktualizowany w przeglądarce')
-                      } catch {
-                        toast.error('Błąd — sprawdź czy przeglądarka jest połączona z urządzeniem')
-                      }
-                      setSaving(false)
-                    }}
-                    disabled={saving || !tokenValid}
-                    className="flex items-center gap-2 bg-gray-700 hover:bg-gray-800 text-white
-                      px-4 py-2.5 rounded-xl text-sm font-medium transition-colors w-fit
-                      disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    <KeyRound size={15} />
-                    {saving ? 'Zapisywanie…' : 'Zmień token na urządzeniu'}
-                  </button>
+                  <Tooltip text={tokenValid ? 'Wyślij nowy token do urządzenia i zaktualizuj w przeglądarce' : 'Wpisz prawidłowy token (10 znaków hex) aby odblokować'}>
+                    <button
+                      onClick={async () => {
+                        if (!tokenValid) { toast.error('Token musi mieć 10 znaków hex (0-9, a-f)'); return }
+                        setSaving(true)
+                        try {
+                          await apiSaveSettings({ api_token: pass.token } as any)
+                          setToken(pass.token)
+                          setLocalToken(pass.token)
+                          setPass(p => ({ ...p, token: '' }))
+                          toast.success('Token zmieniony na urządzeniu i zaktualizowany w przeglądarce')
+                        } catch {
+                          toast.error('Błąd — sprawdź czy przeglądarka jest połączona z urządzeniem')
+                        }
+                        setSaving(false)
+                      }}
+                      disabled={saving || !tokenValid}
+                      className="flex items-center gap-2 bg-gray-700 hover:bg-gray-800 text-white
+                        px-4 py-2.5 rounded-xl text-sm font-medium transition-colors w-fit
+                        disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      <KeyRound size={15} />
+                      {saving ? 'Zapisywanie…' : 'Zmień token na urządzeniu'}
+                    </button>
+                  </Tooltip>
                 </div>
               )
             })()}
@@ -661,7 +687,7 @@ export default function SettingsPage() {
                 onChange={e => setPass({ ...pass, wifi: e.target.value })}
                 className={inputCls} placeholder="••••••••" />
             </Field>
-            <SaveButton saving={saving} onClick={save} />
+            <SaveButton saving={saving} onClick={save} tip="Zapisz dane sieci WiFi na urządzeniu" />
           </div>
         )}
 
@@ -683,7 +709,7 @@ export default function SettingsPage() {
                 onChange={e => setPass({ ...pass, mqtt: e.target.value })}
                 className={inputCls} placeholder="••••••••" />
             </Field>
-            <SaveButton saving={saving} onClick={save} />
+            <SaveButton saving={saving} onClick={save} tip="Zapisz konfigurację brokera MQTT na urządzeniu" />
           </div>
         )}
 
@@ -729,20 +755,22 @@ export default function SettingsPage() {
                         </p>
                       </div>
                     </div>
-                    <button
-                      onClick={async () => {
-                        try {
-                          await apiSetIrrigation(undefined, !devStatus.ignore_php)
-                          toast.success(devStatus.ignore_php ? 'Skrypt włączony' : 'Skrypt wyłączony')
-                          apiGetStatus().then(r => setDevStatus(r.data)).catch(() => {})
-                        } catch { toast.error('Błąd') }
-                      }}
-                      className={`relative inline-flex w-12 h-6 rounded-full transition-colors shrink-0
-                        ${devStatus.ignore_php ? 'bg-orange-400' : 'bg-gray-300'}`}
-                    >
-                      <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow
-                        transition-transform ${devStatus.ignore_php ? 'translate-x-6' : ''}`} />
-                    </button>
+                    <Tooltip text={devStatus.ignore_php ? 'Włącz skrypt — decyzja z internetu' : 'Wyłącz skrypt — decyzja manualna'}>
+                      <button
+                        onClick={async () => {
+                          try {
+                            await apiSetIrrigation(undefined, !devStatus.ignore_php)
+                            toast.success(devStatus.ignore_php ? 'Skrypt włączony' : 'Skrypt wyłączony')
+                            apiGetStatus().then(r => setDevStatus(r.data)).catch(() => {})
+                          } catch { toast.error('Błąd') }
+                        }}
+                        className={`relative inline-flex w-12 h-6 rounded-full transition-colors shrink-0
+                          ${devStatus.ignore_php ? 'bg-orange-400' : 'bg-gray-300'}`}
+                      >
+                        <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow
+                          transition-transform ${devStatus.ignore_php ? 'translate-x-6' : ''}`} />
+                      </button>
+                    </Tooltip>
                   </div>
                 )}
               </div>
@@ -782,14 +810,16 @@ export default function SettingsPage() {
                     <p className="text-sm font-medium text-gray-800">Wysyłka logów</p>
                     <p className="text-xs text-gray-400">Wysyłaj logi do serwera Graylog przez UDP</p>
                   </div>
-                  <button
-                    onClick={() => setCfg(c => ({ ...c, graylog_enabled: !c.graylog_enabled }))}
-                    className={`relative inline-flex w-12 h-6 rounded-full transition-colors shrink-0
-                      ${cfg.graylog_enabled ? 'bg-green-500' : 'bg-gray-300'}`}
-                  >
-                    <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow
-                      transition-transform ${cfg.graylog_enabled ? 'translate-x-6' : ''}`} />
-                  </button>
+                  <Tooltip text={cfg.graylog_enabled ? 'Wyłącz wysyłkę logów do Graylog' : 'Włącz wysyłkę logów do Graylog przez UDP'}>
+                    <button
+                      onClick={() => setCfg(c => ({ ...c, graylog_enabled: !c.graylog_enabled }))}
+                      className={`relative inline-flex w-12 h-6 rounded-full transition-colors shrink-0
+                        ${cfg.graylog_enabled ? 'bg-green-500' : 'bg-gray-300'}`}
+                    >
+                      <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow
+                        transition-transform ${cfg.graylog_enabled ? 'translate-x-6' : ''}`} />
+                    </button>
+                  </Tooltip>
                 </div>
                 {cfg.graylog_enabled && (
                   <>
@@ -820,7 +850,7 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            <SaveButton saving={saving} onClick={save} />
+            <SaveButton saving={saving} onClick={save} tip="Zapisz ustawienia usług (NTP, Graylog, PHP) na urządzeniu" />
           </div>
         )}
 
@@ -896,14 +926,16 @@ export default function SettingsPage() {
               )}
 
               {otaFile && otaStatus === 'idle' && (
-                <button
-                  onClick={startOta}
-                  className="flex items-center gap-2 bg-orange-600 hover:bg-orange-700 text-white
-                    px-4 py-2 rounded-xl text-sm font-medium transition-colors w-fit"
-                >
-                  <Upload size={14} />
-                  Wgraj firmware ({(otaFile.size / 1024 / 1024).toFixed(2)} MB)
-                </button>
+                <Tooltip text="Wyślij plik firmware na urządzenie — spowoduje automatyczny restart">
+                  <button
+                    onClick={startOta}
+                    className="flex items-center gap-2 bg-orange-600 hover:bg-orange-700 text-white
+                      px-4 py-2 rounded-xl text-sm font-medium transition-colors w-fit"
+                  >
+                    <Upload size={14} />
+                    Wgraj firmware ({(otaFile.size / 1024 / 1024).toFixed(2)} MB)
+                  </button>
+                </Tooltip>
               )}
 
               {otaStatus === 'uploading' && (
@@ -937,14 +969,16 @@ export default function SettingsPage() {
               )}
 
               {spiffsFile && spiffsStatus === 'idle' && (
-                <button
-                  onClick={startSpiffsOta}
-                  className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white
-                    px-4 py-2 rounded-xl text-sm font-medium transition-colors w-fit"
-                >
-                  <Upload size={14} />
-                  Wgraj interfejs ({(spiffsFile.size / 1024 / 1024).toFixed(2)} MB)
-                </button>
+                <Tooltip text="Wyślij plik SPIFFS (interfejs webowy) na urządzenie — wymaga restartu">
+                  <button
+                    onClick={startSpiffsOta}
+                    className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white
+                      px-4 py-2 rounded-xl text-sm font-medium transition-colors w-fit"
+                  >
+                    <Upload size={14} />
+                    Wgraj interfejs ({(spiffsFile.size / 1024 / 1024).toFixed(2)} MB)
+                  </button>
+                </Tooltip>
               )}
 
               {spiffsStatus === 'uploading' && (
@@ -957,14 +991,16 @@ export default function SettingsPage() {
                     <CheckCircle size={18} className="text-green-600 shrink-0" />
                     <p className="text-sm font-medium text-green-800">Interfejs wgrany — wymagany restart</p>
                   </div>
-                  <button
-                    onClick={doRestart}
-                    className="flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white
-                      px-3 py-1.5 rounded-lg text-xs font-medium transition-colors shrink-0"
-                  >
-                    <RefreshCw size={13} />
-                    Restartuj
-                  </button>
+                  <Tooltip text="Zrestartuj urządzenie aby zastosować nowy interfejs">
+                    <button
+                      onClick={doRestart}
+                      className="flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white
+                        px-3 py-1.5 rounded-lg text-xs font-medium transition-colors shrink-0"
+                    >
+                      <RefreshCw size={13} />
+                      Restartuj
+                    </button>
+                  </Tooltip>
                 </div>
               )}
 
@@ -978,14 +1014,16 @@ export default function SettingsPage() {
             {/* ---- Wgraj oba jednocześnie ---- */}
             {otaFile && spiffsFile &&
               otaStatus === 'idle' && spiffsStatus === 'idle' && (
-              <button
-                onClick={startBothOta}
-                className="flex items-center justify-center gap-2 bg-green-700 hover:bg-green-800
-                  text-white px-4 py-3 rounded-xl text-sm font-semibold transition-colors"
-              >
-                <Upload size={16} />
-                Wgraj oba (SPIFFS → firmware + restart)
-              </button>
+              <Tooltip text="Wgraj interfejs (SPIFFS) a następnie firmware — jedno kliknięcie, jeden restart">
+                <button
+                  onClick={startBothOta}
+                  className="flex items-center justify-center gap-2 bg-green-700 hover:bg-green-800
+                    text-white px-4 py-3 rounded-xl text-sm font-semibold transition-colors"
+                >
+                  <Upload size={16} />
+                  Wgraj oba (SPIFFS → firmware + restart)
+                </button>
+              </Tooltip>
             )}
 
           </div>
@@ -1002,15 +1040,17 @@ export default function SettingsPage() {
                 konfigurację WiFi, MQTT, PHP, harmonogram i grupy.
                 Hasła są zapisane w pliku — przechowuj go bezpiecznie.
               </p>
-              <button
-                onClick={doExport}
-                disabled={exporting}
-                className="flex items-center gap-2 bg-green-700 hover:bg-green-800 disabled:opacity-50
-                  text-white px-4 py-2.5 rounded-xl text-sm font-medium transition-colors w-fit"
-              >
-                <Download size={15} />
-                {exporting ? 'Pobieranie…' : 'Pobierz backup (.json)'}
-              </button>
+              <Tooltip text="Pobierz plik JSON ze wszystkimi ustawieniami urządzenia (przechowuj bezpiecznie)">
+                <button
+                  onClick={doExport}
+                  disabled={exporting}
+                  className="flex items-center gap-2 bg-green-700 hover:bg-green-800 disabled:opacity-50
+                    text-white px-4 py-2.5 rounded-xl text-sm font-medium transition-colors w-fit"
+                >
+                  <Download size={15} />
+                  {exporting ? 'Pobieranie…' : 'Pobierz backup (.json)'}
+                </button>
+              </Tooltip>
             </div>
 
             {/* Import */}
@@ -1062,15 +1102,17 @@ export default function SettingsPage() {
               )}
 
               {importPreview && !importError && (
-                <button
-                  onClick={doImport}
-                  disabled={importing}
-                  className="flex items-center gap-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-50
-                    text-white px-4 py-2.5 rounded-xl text-sm font-medium transition-colors w-fit"
-                >
-                  <ArchiveRestore size={15} />
-                  {importing ? 'Przywracanie…' : 'Przywróć ustawienia'}
-                </button>
+                <Tooltip text="Nadpisz wszystkie ustawienia urządzenia danymi z pliku (nieodwracalne)">
+                  <button
+                    onClick={doImport}
+                    disabled={importing}
+                    className="flex items-center gap-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-50
+                      text-white px-4 py-2.5 rounded-xl text-sm font-medium transition-colors w-fit"
+                  >
+                    <ArchiveRestore size={15} />
+                    {importing ? 'Przywracanie…' : 'Przywróć ustawienia'}
+                  </button>
+                </Tooltip>
               )}
             </div>
 
@@ -1089,31 +1131,35 @@ export default function SettingsPage() {
               Synchronizacja ustawia czas RTC na podstawie czasu lokalnego przeglądarki lub serwera NTP.
             </p>
             <div className="flex gap-2 flex-wrap">
-              <button
-                onClick={syncTime}
-                className="flex items-center gap-2 bg-gray-700 hover:bg-gray-800 text-white
-                  px-4 py-2.5 rounded-xl text-sm font-medium transition-colors"
-              >
-                <RefreshCw size={15} />
-                Synchronizuj z przeglądarką
-              </button>
-              <button
-                onClick={async () => {
-                  try {
-                    await apiSyncNtp()
-                    toast.success('Synchronizacja NTP zakończona')
-                    apiGetTime().then(r => setRtcTime(r.data.time.replace('T', ' '))).catch(() => {})
-                  } catch (e: any) {
-                    const msg = e?.response?.data?.error
-                    toast.error(msg === 'no WiFi connection' ? 'Brak połączenia WiFi' : 'Błąd synchronizacji NTP')
-                  }
-                }}
-                className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white
-                  px-4 py-2.5 rounded-xl text-sm font-medium transition-colors"
-              >
-                <Antenna size={15} />
-                Synchronizuj z NTP
-              </button>
+              <Tooltip text="Ustaw czas RTC na podstawie aktualnego czasu tej przeglądarki">
+                <button
+                  onClick={syncTime}
+                  className="flex items-center gap-2 bg-gray-700 hover:bg-gray-800 text-white
+                    px-4 py-2.5 rounded-xl text-sm font-medium transition-colors"
+                >
+                  <RefreshCw size={15} />
+                  Synchronizuj z przeglądarką
+                </button>
+              </Tooltip>
+              <Tooltip text="Pobierz czas z serwera NTP przez WiFi i ustaw RTC">
+                <button
+                  onClick={async () => {
+                    try {
+                      await apiSyncNtp()
+                      toast.success('Synchronizacja NTP zakończona')
+                      apiGetTime().then(r => setRtcTime(r.data.time.replace('T', ' '))).catch(() => {})
+                    } catch (e: any) {
+                      const msg = e?.response?.data?.error
+                      toast.error(msg === 'no WiFi connection' ? 'Brak połączenia WiFi' : 'Błąd synchronizacji NTP')
+                    }
+                  }}
+                  className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white
+                    px-4 py-2.5 rounded-xl text-sm font-medium transition-colors"
+                >
+                  <Antenna size={15} />
+                  Synchronizuj z NTP
+                </button>
+              </Tooltip>
             </div>
           </div>
         )}
@@ -1136,8 +1182,8 @@ export default function SettingsPage() {
   )
 }
 
-function SaveButton({ saving, onClick }: { saving: boolean; onClick: () => void }) {
-  return (
+function SaveButton({ saving, onClick, tip }: { saving: boolean; onClick: () => void; tip?: string }) {
+  const btn = (
     <button
       onClick={onClick}
       disabled={saving}
@@ -1148,4 +1194,6 @@ function SaveButton({ saving, onClick }: { saving: boolean; onClick: () => void 
       {saving ? 'Zapisywanie…' : 'Zapisz ustawienia'}
     </button>
   )
+  if (!tip) return btn
+  return <Tooltip text={tip}>{btn}</Tooltip>
 }

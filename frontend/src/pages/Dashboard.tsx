@@ -5,6 +5,7 @@ import {
   apiGetStatus, apiSectionOn, apiSectionOff, apiAllOff, apiActivateGroup,
   SystemStatus, SectionState, GroupStatus
 } from '../api/client'
+import { Tooltip } from '../components/Tooltip'
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -30,10 +31,10 @@ function formatDuration(sec: number): string {
 }
 
 function rssiStrength(rssi: number): { bars: number; label: string; color: string } {
-  if (rssi >= -50) return { bars: 4, label: 'Doskonały', color: 'text-green-500' }
-  if (rssi >= -65) return { bars: 3, label: 'Dobry',     color: 'text-green-400' }
-  if (rssi >= -75) return { bars: 2, label: 'Słaby',     color: 'text-yellow-400' }
-  return             { bars: 1, label: 'Bardzo słaby', color: 'text-red-400' }
+  if (rssi >= -50) return { bars: 4, label: 'Doskonały',     color: 'text-green-500' }
+  if (rssi >= -65) return { bars: 3, label: 'Dobry',         color: 'text-green-400' }
+  if (rssi >= -75) return { bars: 2, label: 'Słaby',         color: 'text-yellow-400' }
+  return             { bars: 1, label: 'Bardzo słaby',  color: 'text-red-400' }
 }
 
 // ─── RssiIcon ─────────────────────────────────────────────────────────────────
@@ -63,32 +64,36 @@ function SectionCard({
   onToggle: (id: number, active: boolean) => void
 }) {
   const { id, active, remaining_sec } = section
+  const tip = active
+    ? `Kliknij aby wyłączyć sekcję ${id} (pozostało: ${formatCountdown(remaining_sec)})`
+    : `Kliknij aby włączyć sekcję ${id} na ${formatDuration(duration)}`
 
   return (
-    <button
-      onClick={() => onToggle(id, active)}
-      className={`relative flex flex-col items-center gap-2 rounded-2xl p-4 w-full
-        transition-all duration-200 active:scale-95 select-none
-        ${active
-          ? 'bg-green-500 text-white shadow-lg shadow-green-200 hover:bg-green-400'
-          : 'bg-white text-gray-600 shadow-sm border border-gray-100 hover:bg-green-50 hover:border-green-200'}`}
-    >
-      {/* Pulsujący ring gdy aktywna */}
-      {active && (
-        <span className="absolute inset-0 rounded-2xl bg-green-400 opacity-30 animate-pulse" />
-      )}
+    <Tooltip text={tip} className="w-full">
+      <button
+        onClick={() => onToggle(id, active)}
+        className={`relative flex flex-col items-center gap-2 rounded-2xl p-4 w-full
+          transition-all duration-200 active:scale-95 select-none
+          ${active
+            ? 'bg-green-500 text-white shadow-lg shadow-green-200 hover:bg-green-400'
+            : 'bg-white text-gray-600 shadow-sm border border-gray-100 hover:bg-green-50 hover:border-green-200'}`}
+      >
+        {active && (
+          <span className="absolute inset-0 rounded-2xl bg-green-400 opacity-30 animate-pulse" />
+        )}
 
-      <Droplets
-        size={28}
-        className={active ? 'text-white' : 'text-green-600'}
-      />
+        <Droplets
+          size={28}
+          className={active ? 'text-white' : 'text-green-600'}
+        />
 
-      <span className="font-bold text-base z-10">Sekcja {id}</span>
+        <span className="font-bold text-base z-10">Sekcja {id}</span>
 
-      <span className={`text-xs font-mono z-10 ${active ? 'text-green-100' : 'text-gray-400'}`}>
-        {active ? formatCountdown(remaining_sec) : 'OFF'}
-      </span>
-    </button>
+        <span className={`text-xs font-mono z-10 ${active ? 'text-green-100' : 'text-gray-400'}`}>
+          {active ? formatCountdown(remaining_sec) : 'OFF'}
+        </span>
+      </button>
+    </Tooltip>
   )
 }
 
@@ -105,54 +110,59 @@ function GroupCard({
   const empty = section_mask === 0
   const sections = [1,2,3,4,5,6,7,8].filter(s => section_mask & (1 << (s-1)))
 
+  const tip = empty
+    ? 'Brak sekcji przypisanych do tej grupy'
+    : active
+      ? `Kliknij aby wyłączyć grupę "${name}" (pozostało: ${formatCountdown(remaining_sec)})`
+      : `Kliknij aby włączyć grupę "${name}" na ${formatDuration(duration)}`
+
   return (
-    <button
-      onClick={() => !empty && onActivate(id, active)}
-      disabled={empty}
-      className={`relative flex items-center gap-3 rounded-2xl px-4 py-3 w-full text-left
-        transition-all duration-200 active:scale-95 select-none
-        ${empty
-          ? 'bg-gray-50 text-gray-300 border border-dashed border-gray-200 cursor-not-allowed'
-          : active
-            ? 'bg-blue-500 text-white shadow-lg shadow-blue-200 hover:bg-blue-400'
-            : 'bg-white text-gray-700 shadow-sm border border-gray-100 hover:bg-blue-50 hover:border-blue-200'}`}
-    >
-      {active && (
-        <span className="absolute inset-0 rounded-2xl bg-blue-400 opacity-20 animate-pulse" />
-      )}
+    <Tooltip text={tip} className="w-full">
+      <button
+        onClick={() => !empty && onActivate(id, active)}
+        disabled={empty}
+        className={`relative flex items-center gap-3 rounded-2xl px-4 py-3 w-full text-left
+          transition-all duration-200 active:scale-95 select-none
+          ${empty
+            ? 'bg-gray-50 text-gray-300 border border-dashed border-gray-200 cursor-not-allowed'
+            : active
+              ? 'bg-blue-500 text-white shadow-lg shadow-blue-200 hover:bg-blue-400'
+              : 'bg-white text-gray-700 shadow-sm border border-gray-100 hover:bg-blue-50 hover:border-blue-200'}`}
+      >
+        {active && (
+          <span className="absolute inset-0 rounded-2xl bg-blue-400 opacity-20 animate-pulse" />
+        )}
 
-      {/* Ikona + status */}
-      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 z-10
-        ${active ? 'bg-white/20' : 'bg-blue-50'}`}>
-        <Layers size={20} className={active ? 'text-white' : 'text-blue-500'} />
-      </div>
-
-      {/* Nazwa + sekcje */}
-      <div className="flex-1 min-w-0 z-10">
-        <div className="flex items-center gap-2">
-          <span className="font-bold text-sm">{name}</span>
-          {active && (
-            <span className="bg-white/30 text-white text-xs font-bold px-2 py-0.5 rounded-full">
-              ON
-            </span>
-          )}
+        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 z-10
+          ${active ? 'bg-white/20' : 'bg-blue-50'}`}>
+          <Layers size={20} className={active ? 'text-white' : 'text-blue-500'} />
         </div>
-        <div className="flex gap-1 mt-1 flex-wrap">
-          {sections.map(s => (
-            <span key={s} className={`text-xs px-1.5 py-0.5 rounded font-medium
-              ${active ? 'bg-white/25 text-white' : 'bg-blue-50 text-blue-600'}`}>
-              S{s}
-            </span>
-          ))}
-        </div>
-      </div>
 
-      {/* Countdown */}
-      <span className={`text-sm font-mono font-bold shrink-0 z-10
-        ${active ? 'text-white' : 'text-gray-400'}`}>
-        {active ? formatCountdown(remaining_sec) : 'OFF'}
-      </span>
-    </button>
+        <div className="flex-1 min-w-0 z-10">
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-sm">{name}</span>
+            {active && (
+              <span className="bg-white/30 text-white text-xs font-bold px-2 py-0.5 rounded-full">
+                ON
+              </span>
+            )}
+          </div>
+          <div className="flex gap-1 mt-1 flex-wrap">
+            {sections.map(s => (
+              <span key={s} className={`text-xs px-1.5 py-0.5 rounded font-medium
+                ${active ? 'bg-white/25 text-white' : 'bg-blue-50 text-blue-600'}`}>
+                S{s}
+              </span>
+            ))}
+          </div>
+        </div>
+
+        <span className={`text-sm font-mono font-bold shrink-0 z-10
+          ${active ? 'text-white' : 'text-gray-400'}`}>
+          {active ? formatCountdown(remaining_sec) : 'OFF'}
+        </span>
+      </button>
+    </Tooltip>
   )
 }
 
@@ -172,23 +182,31 @@ function DurationSlider({ value, onChange }: { value: number; onChange: (v: numb
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
       <div className="flex items-center justify-between mb-3">
-        <span className="text-sm font-medium text-gray-700">Czas trwania</span>
+        <Tooltip text="Czas trwania nawadniania dla sekcji i grup" pos="top">
+          <span className="text-sm font-medium text-gray-700 cursor-default">Czas trwania</span>
+        </Tooltip>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => onChange(Math.max(60, value - 60))}
-            className="w-7 h-7 rounded-lg bg-gray-100 hover:bg-gray-200 active:scale-90
-              flex items-center justify-center text-gray-600 font-bold text-lg leading-none
-              transition-all select-none"
-          >−</button>
-          <span className="text-lg font-bold text-green-700 w-20 text-center whitespace-nowrap">
-            {formatDuration(value)}
-          </span>
-          <button
-            onClick={() => onChange(Math.min(MAX, value + 60))}
-            className="w-7 h-7 rounded-lg bg-gray-100 hover:bg-gray-200 active:scale-90
-              flex items-center justify-center text-gray-600 font-bold text-lg leading-none
-              transition-all select-none"
-          >+</button>
+          <Tooltip text="Zmniejsz o 1 minutę">
+            <button
+              onClick={() => onChange(Math.max(60, value - 60))}
+              className="w-7 h-7 rounded-lg bg-gray-100 hover:bg-gray-200 active:scale-90
+                flex items-center justify-center text-gray-600 font-bold text-lg leading-none
+                transition-all select-none"
+            >−</button>
+          </Tooltip>
+          <Tooltip text={`Aktualnie: ${formatDuration(value)}`}>
+            <span className="text-lg font-bold text-green-700 w-20 text-center whitespace-nowrap block cursor-default">
+              {formatDuration(value)}
+            </span>
+          </Tooltip>
+          <Tooltip text="Zwiększ o 1 minutę">
+            <button
+              onClick={() => onChange(Math.min(MAX, value + 60))}
+              className="w-7 h-7 rounded-lg bg-gray-100 hover:bg-gray-200 active:scale-90
+                flex items-center justify-center text-gray-600 font-bold text-lg leading-none
+                transition-all select-none"
+            >+</button>
+          </Tooltip>
         </div>
       </div>
 
@@ -200,6 +218,7 @@ function DurationSlider({ value, onChange }: { value: number; onChange: (v: numb
         value={value}
         onChange={e => onChange(+e.target.value)}
         className="w-full accent-green-600 cursor-pointer"
+        title={`Czas trwania: ${formatDuration(value)}`}
       />
 
       <div className="relative mt-1 h-5">
@@ -207,15 +226,16 @@ function DurationSlider({ value, onChange }: { value: number; onChange: (v: numb
           const pct = (m.v - 60) / (MAX - 60) * 100
           const transform = pct < 5 ? 'none' : pct > 95 ? 'translateX(-100%)' : 'translateX(-50%)'
           return (
-            <button
-              key={m.v}
-              onClick={() => onChange(m.v)}
-              style={{ left: `${pct}%`, transform }}
-              className={`absolute text-xs px-1 py-0.5 rounded transition-colors whitespace-nowrap
-                ${value === m.v ? 'text-green-700 font-bold' : 'text-gray-400 hover:text-green-600'}`}
-            >
-              {m.l}
-            </button>
+            <Tooltip key={m.v} text={`Ustaw czas na ${m.l}`} pos="bottom">
+              <button
+                onClick={() => onChange(m.v)}
+                style={{ left: `${pct}%`, transform }}
+                className={`absolute text-xs px-1 py-0.5 rounded transition-colors whitespace-nowrap
+                  ${value === m.v ? 'text-green-700 font-bold' : 'text-gray-400 hover:text-green-600'}`}
+              >
+                {m.l}
+              </button>
+            </Tooltip>
           )
         })}
       </div>
@@ -248,14 +268,12 @@ export default function Dashboard() {
     }
   }
 
-  // Odświeżanie co 3s
   useEffect(() => {
     load()
     const t = setInterval(load, 3000)
     return () => clearInterval(t)
   }, [])
 
-  // Lokalny countdown (tick co 1s bez API)
   useEffect(() => {
     if (countdownRef.current) clearInterval(countdownRef.current)
     countdownRef.current = setInterval(() => {
@@ -346,6 +364,7 @@ export default function Dashboard() {
   }
 
   const anyActive = status.sections_active > 0
+  const { label: rssiLabel } = rssiStrength(status.rssi)
 
   return (
     <div className="flex flex-col gap-4">
@@ -354,57 +373,75 @@ export default function Dashboard() {
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
 
-          <div className="flex items-center gap-2">
-            <Clock size={16} className="text-gray-400 shrink-0" />
-            <div>
-              <p className="text-xs text-gray-400">Czas</p>
-              <p className="text-sm font-semibold text-gray-800 leading-tight">
-                {status.time.replace('T', ' ').substring(0, 16)}
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Wifi size={16} className="text-gray-400 shrink-0" />
-            <div>
-              <p className="text-xs text-gray-400">WiFi</p>
-              <div className="flex items-center gap-1.5">
-                <RssiIcon rssi={status.rssi} />
-                <p className="text-sm font-semibold text-gray-800">{status.rssi} dBm</p>
+          <Tooltip text="Czas systemowy urządzenia (RTC DS3231)">
+            <div className="flex items-center gap-2 cursor-default">
+              <Clock size={16} className="text-gray-400 shrink-0" />
+              <div>
+                <p className="text-xs text-gray-400">Czas</p>
+                <p className="text-sm font-semibold text-gray-800 leading-tight">
+                  {status.time.replace('T', ' ').substring(0, 16)}
+                </p>
               </div>
             </div>
-          </div>
+          </Tooltip>
 
-          <div className="flex items-center gap-2">
-            <Thermometer size={16} className="text-gray-400 shrink-0" />
-            <div>
-              <p className="text-xs text-gray-400">Temperatura</p>
-              <p className="text-sm font-semibold text-gray-800">
-                {status.temperature !== null ? `${status.temperature.toFixed(1)} °C` : '—'}
-              </p>
+          <Tooltip text={`Sygnał WiFi: ${rssiLabel} (${status.rssi} dBm)`}>
+            <div className="flex items-center gap-2 cursor-default">
+              <Wifi size={16} className="text-gray-400 shrink-0" />
+              <div>
+                <p className="text-xs text-gray-400">WiFi</p>
+                <div className="flex items-center gap-1.5">
+                  <RssiIcon rssi={status.rssi} />
+                  <p className="text-sm font-semibold text-gray-800">{status.rssi} dBm</p>
+                </div>
+              </div>
             </div>
-          </div>
+          </Tooltip>
 
-          <div className="flex items-center gap-2">
-            <Clock size={16} className="text-gray-400 shrink-0" />
-            <div>
-              <p className="text-xs text-gray-400">Uptime</p>
-              <p className="text-sm font-semibold text-gray-800">{formatUptime(status.uptime_sec)}</p>
+          <Tooltip text={
+            status.temperature !== null
+              ? `Odczyt z czujnika DS18B20 (zewnętrzny)`
+              : 'Czujnik DS18B20 niedostępny lub niepodłączony'
+          }>
+            <div className="flex items-center gap-2 cursor-default">
+              <Thermometer size={16} className="text-gray-400 shrink-0" />
+              <div>
+                <p className="text-xs text-gray-400">Temperatura</p>
+                <p className="text-sm font-semibold text-gray-800">
+                  {status.temperature !== null ? `${status.temperature.toFixed(1)} °C` : '—'}
+                </p>
+              </div>
             </div>
-          </div>
+          </Tooltip>
 
-          <div className="flex items-center gap-2">
-            <Droplets size={16} className="text-gray-400 shrink-0" />
-            <div>
-              <p className="text-xs text-gray-400">Nawadnianie</p>
-              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
-                ${status.irrigation_today
-                  ? 'bg-green-100 text-green-700'
-                  : 'bg-red-100 text-red-600'}`}>
-                {status.irrigation_today ? 'Aktywne' : 'Zablokowane'}
-              </span>
+          <Tooltip text="Czas pracy od ostatniego restartu">
+            <div className="flex items-center gap-2 cursor-default">
+              <Clock size={16} className="text-gray-400 shrink-0" />
+              <div>
+                <p className="text-xs text-gray-400">Uptime</p>
+                <p className="text-sm font-semibold text-gray-800">{formatUptime(status.uptime_sec)}</p>
+              </div>
             </div>
-          </div>
+          </Tooltip>
+
+          <Tooltip text={
+            status.irrigation_today
+              ? 'Aktywne — harmonogram będzie dziś wykonany'
+              : 'Zablokowane — harmonogram zostanie pominięty'
+          }>
+            <div className="flex items-center gap-2 cursor-default">
+              <Droplets size={16} className="text-gray-400 shrink-0" />
+              <div>
+                <p className="text-xs text-gray-400">Nawadnianie</p>
+                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium
+                  ${status.irrigation_today
+                    ? 'bg-green-100 text-green-700'
+                    : 'bg-red-100 text-red-600'}`}>
+                  {status.irrigation_today ? 'Aktywne' : 'Zablokowane'}
+                </span>
+              </div>
+            </div>
+          </Tooltip>
 
         </div>
       </div>
@@ -414,14 +451,16 @@ export default function Dashboard() {
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">Sekcje</h2>
           {anyActive && (
-            <button
-              onClick={allOff}
-              className="flex items-center gap-1.5 bg-red-500 hover:bg-red-600 text-white
-                text-xs font-medium px-3 py-1.5 rounded-full transition-colors shadow-sm"
-            >
-              <Power size={13} />
-              Wyłącz wszystko
-            </button>
+            <Tooltip text="Natychmiastowe wyłączenie wszystkich aktywnych sekcji">
+              <button
+                onClick={allOff}
+                className="flex items-center gap-1.5 bg-red-500 hover:bg-red-600 text-white
+                  text-xs font-medium px-3 py-1.5 rounded-full transition-colors shadow-sm"
+              >
+                <Power size={13} />
+                Wyłącz wszystko
+              </button>
+            </Tooltip>
           )}
         </div>
 

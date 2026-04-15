@@ -3,8 +3,10 @@ import toast from 'react-hot-toast'
 import { ChevronDown, ChevronUp, Trash2, Save, X } from 'lucide-react'
 import { apiGetSchedule, apiSetSchedule, apiDelSchedule, apiGetGroups, ScheduleEntry, Group } from '../api/client'
 import { getScheduleMode } from './Settings'
+import { Tooltip } from '../components/Tooltip'
 
 const DAYS = ['Pon', 'Wt', 'Śr', 'Czw', 'Pt', 'Sob', 'Nie']
+const DAYS_FULL = ['Poniedziałek', 'Wtorek', 'Środa', 'Czwartek', 'Piątek', 'Sobota', 'Niedziela']
 const SECTIONS = [1, 2, 3, 4, 5, 6, 7, 8]
 
 function formatDur(s: number): string {
@@ -18,8 +20,14 @@ function formatDur(s: number): string {
 
 // ─── Toggle switch ─────────────────────────────────────────────────────────────
 
-function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
-  return (
+function ToggleSwitch({
+  checked, onChange, tip,
+}: {
+  checked: boolean
+  onChange: (v: boolean) => void
+  tip?: string
+}) {
+  const btn = (
     <button
       onClick={e => { e.stopPropagation(); onChange(!checked) }}
       className={`relative inline-flex w-10 h-5 rounded-full transition-colors shrink-0
@@ -29,6 +37,8 @@ function ToggleSwitch({ checked, onChange }: { checked: boolean; onChange: (v: b
         transition-transform ${checked ? 'translate-x-5' : ''}`} />
     </button>
   )
+  if (!tip) return btn
+  return <Tooltip text={tip}>{btn}</Tooltip>
 }
 
 // ─── Day pills ─────────────────────────────────────────────────────────────────
@@ -37,13 +47,14 @@ function DayPills({ mask }: { mask: number }) {
   return (
     <div className="flex gap-0.5 flex-wrap">
       {DAYS.map((d, i) => (
-        <span
-          key={i}
-          className={`text-xs px-1 py-0.5 rounded font-medium
-            ${mask & (1 << i) ? 'bg-green-100 text-green-700' : 'text-gray-300'}`}
-        >
-          {d}
-        </span>
+        <Tooltip key={i} text={DAYS_FULL[i]}>
+          <span
+            className={`text-xs px-1 py-0.5 rounded font-medium cursor-default
+              ${mask & (1 << i) ? 'bg-green-100 text-green-700' : 'text-gray-300'}`}
+          >
+            {d}
+          </span>
+        </Tooltip>
       ))}
     </div>
   )
@@ -71,24 +82,30 @@ function EditForm({
       <div className="flex items-center gap-4 flex-wrap">
         <div>
           <label className="text-xs text-gray-500 block mb-1">Godzina</label>
-          <input type="number" min={0} max={23} value={entry.hour}
-            onChange={e => set({ hour: +e.target.value })}
-            className="w-16 border border-gray-200 rounded-lg px-2 py-1.5 text-center text-sm
-              focus:outline-none focus:ring-2 focus:ring-green-400" />
+          <Tooltip text="Godzina uruchomienia (0–23)" pos="bottom">
+            <input type="number" min={0} max={23} value={entry.hour}
+              onChange={e => set({ hour: +e.target.value })}
+              className="w-16 border border-gray-200 rounded-lg px-2 py-1.5 text-center text-sm
+                focus:outline-none focus:ring-2 focus:ring-green-400" />
+          </Tooltip>
         </div>
         <div>
           <label className="text-xs text-gray-500 block mb-1">Minuta</label>
-          <input type="number" min={0} max={59} value={entry.minute}
-            onChange={e => set({ minute: +e.target.value })}
-            className="w-16 border border-gray-200 rounded-lg px-2 py-1.5 text-center text-sm
-              focus:outline-none focus:ring-2 focus:ring-green-400" />
+          <Tooltip text="Minuta uruchomienia (0–59)" pos="bottom">
+            <input type="number" min={0} max={59} value={entry.minute}
+              onChange={e => set({ minute: +e.target.value })}
+              className="w-16 border border-gray-200 rounded-lg px-2 py-1.5 text-center text-sm
+                focus:outline-none focus:ring-2 focus:ring-green-400" />
+          </Tooltip>
         </div>
         <div>
           <label className="text-xs text-gray-500 block mb-1">Czas [min]</label>
-          <input type="number" min={0} max={240} value={Math.round(entry.duration_sec / 60)}
-            onChange={e => set({ duration_sec: +e.target.value * 60 })}
-            className="w-24 border border-gray-200 rounded-lg px-2 py-1.5 text-center text-sm
-              focus:outline-none focus:ring-2 focus:ring-green-400" />
+          <Tooltip text="Czas trwania nawadniania w minutach (0 = bez limitu)" pos="bottom">
+            <input type="number" min={0} max={240} value={Math.round(entry.duration_sec / 60)}
+              onChange={e => set({ duration_sec: +e.target.value * 60 })}
+              className="w-24 border border-gray-200 rounded-lg px-2 py-1.5 text-center text-sm
+                focus:outline-none focus:ring-2 focus:ring-green-400" />
+          </Tooltip>
         </div>
       </div>
 
@@ -99,14 +116,15 @@ function EditForm({
           {DAYS.map((d, i) => {
             const on = !!(entry.days_mask & (1 << i))
             return (
-              <button
-                key={i}
-                onClick={() => set({ days_mask: entry.days_mask ^ (1 << i) })}
-                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors
-                  ${on ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
-              >
-                {d}
-              </button>
+              <Tooltip key={i} text={on ? `Wyłącz ${DAYS_FULL[i]}` : `Włącz ${DAYS_FULL[i]}`}>
+                <button
+                  onClick={() => set({ days_mask: entry.days_mask ^ (1 << i) })}
+                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors
+                    ${on ? 'bg-green-500 text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                >
+                  {d}
+                </button>
+              </Tooltip>
             )
           })}
         </div>
@@ -120,14 +138,15 @@ function EditForm({
             {SECTIONS.map(s => {
               const on = !!(entry.section_mask & (1 << (s - 1)))
               return (
-                <button
-                  key={s}
-                  onClick={() => set({ section_mask: entry.section_mask ^ (1 << (s - 1)) })}
-                  className={`w-10 h-10 rounded-xl text-sm font-bold transition-colors
-                    ${on ? 'bg-green-500 text-white shadow-sm' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
-                >
-                  {s}
-                </button>
+                <Tooltip key={s} text={on ? `Usuń sekcję ${s}` : `Dodaj sekcję ${s}`}>
+                  <button
+                    onClick={() => set({ section_mask: entry.section_mask ^ (1 << (s - 1)) })}
+                    className={`w-10 h-10 rounded-xl text-sm font-bold transition-colors
+                      ${on ? 'bg-green-500 text-white shadow-sm' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                  >
+                    {s}
+                  </button>
+                </Tooltip>
               )
             })}
           </div>
@@ -139,14 +158,15 @@ function EditForm({
             {groups.filter(g => g.section_mask !== 0).map(g => {
               const on = !!(entry.group_mask & (1 << (g.id - 1)))
               return (
-                <button
-                  key={g.id}
-                  onClick={() => set({ group_mask: on ? 0 : (1 << (g.id - 1)) })}
-                  className={`px-3 py-2 rounded-xl text-xs font-semibold transition-colors
-                    ${on ? 'bg-blue-500 text-white shadow-sm' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
-                >
-                  {g.name}
-                </button>
+                <Tooltip key={g.id} text={on ? `Odznacz grupę "${g.name}"` : `Wybierz grupę "${g.name}"`}>
+                  <button
+                    onClick={() => set({ group_mask: on ? 0 : (1 << (g.id - 1)) })}
+                    className={`px-3 py-2 rounded-xl text-xs font-semibold transition-colors
+                      ${on ? 'bg-blue-500 text-white shadow-sm' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                  >
+                    {g.name}
+                  </button>
+                </Tooltip>
               )
             })}
             {groups.filter(g => g.section_mask !== 0).length === 0 && (
@@ -158,23 +178,27 @@ function EditForm({
 
       {/* Przyciski */}
       <div className="flex gap-2">
-        <button
-          onClick={onSave}
-          disabled={saving}
-          className="flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white
-            px-4 py-2 rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
-        >
-          <Save size={15} />
-          {saving ? 'Zapisywanie…' : 'Zapisz'}
-        </button>
-        <button
-          onClick={onCancel}
-          className="flex items-center gap-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600
-            px-4 py-2 rounded-xl text-sm font-medium transition-colors"
-        >
-          <X size={15} />
-          Anuluj
-        </button>
+        <Tooltip text="Zapisz wpis harmonogramu">
+          <button
+            onClick={onSave}
+            disabled={saving}
+            className="flex items-center gap-1.5 bg-green-600 hover:bg-green-700 text-white
+              px-4 py-2 rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
+          >
+            <Save size={15} />
+            {saving ? 'Zapisywanie…' : 'Zapisz'}
+          </button>
+        </Tooltip>
+        <Tooltip text="Anuluj edycję bez zapisywania">
+          <button
+            onClick={onCancel}
+            className="flex items-center gap-1.5 bg-gray-100 hover:bg-gray-200 text-gray-600
+              px-4 py-2 rounded-xl text-sm font-medium transition-colors"
+          >
+            <X size={15} />
+            Anuluj
+          </button>
+        </Tooltip>
       </div>
     </div>
   )
@@ -197,7 +221,6 @@ export default function Schedule() {
     apiGetGroups().then(r => setGroups(r.data)).catch(() => {})
   }, [])
 
-  // Odśwież tryb gdy zakładka staje się widoczna (user mógł zmienić w Ustawieniach)
   useEffect(() => {
     const onFocus = () => setMode(getScheduleMode())
     window.addEventListener('focus', onFocus)
@@ -272,16 +295,24 @@ export default function Schedule() {
               onClick={() => expandRow(e.id, e)}
             >
               {/* Toggle */}
-              <ToggleSwitch checked={e.enabled} onChange={() => toggleEnabled(e)} />
+              <ToggleSwitch
+                checked={e.enabled}
+                onChange={() => toggleEnabled(e)}
+                tip={e.enabled ? 'Wyłącz ten wpis harmonogramu' : 'Włącz ten wpis harmonogramu'}
+              />
 
               {/* ID */}
-              <span className="text-xs text-gray-400 w-5 shrink-0">#{e.id}</span>
+              <Tooltip text={`Wpis harmonogramu #${e.id}`}>
+                <span className="text-xs text-gray-400 w-5 shrink-0 cursor-default">#{e.id}</span>
+              </Tooltip>
 
               {/* Time */}
-              <span className={`font-mono font-bold text-sm w-12 shrink-0
-                ${e.enabled ? 'text-gray-800' : 'text-gray-400'}`}>
-                {String(e.hour).padStart(2, '0')}:{String(e.minute).padStart(2, '0')}
-              </span>
+              <Tooltip text={`Uruchomienie o ${String(e.hour).padStart(2,'0')}:${String(e.minute).padStart(2,'0')}`}>
+                <span className={`font-mono font-bold text-sm w-12 shrink-0 cursor-default
+                  ${e.enabled ? 'text-gray-800' : 'text-gray-400'}`}>
+                  {String(e.hour).padStart(2, '0')}:{String(e.minute).padStart(2, '0')}
+                </span>
+              </Tooltip>
 
               {/* Days */}
               <div className="flex-1 min-w-0">
@@ -289,46 +320,56 @@ export default function Schedule() {
               </div>
 
               {/* Duration */}
-              <span className="text-xs text-gray-500 shrink-0 hidden sm:block">
-                {formatDur(e.duration_sec)}
-              </span>
+              <Tooltip text={`Czas trwania: ${formatDur(e.duration_sec)}`}>
+                <span className="text-xs text-gray-500 shrink-0 hidden sm:block cursor-default">
+                  {formatDur(e.duration_sec)}
+                </span>
+              </Tooltip>
 
               {/* Active sections / groups */}
               <div className="hidden sm:flex gap-1 flex-wrap">
                 {mode === 'sections' ? (
                   activeSections.length > 0
                     ? activeSections.map(s => (
-                        <span key={s}
-                          className="w-5 h-5 bg-green-100 text-green-700 rounded text-xs
-                            font-bold flex items-center justify-center">
-                          {s}
-                        </span>
+                        <Tooltip key={s} text={`Sekcja ${s} aktywna w tym wpisie`}>
+                          <span
+                            className="w-5 h-5 bg-green-100 text-green-700 rounded text-xs
+                              font-bold flex items-center justify-center cursor-default">
+                            {s}
+                          </span>
+                        </Tooltip>
                       ))
                     : <span className="text-xs text-gray-300">brak</span>
                 ) : (
                   activeGroups.length > 0
                     ? activeGroups.map(g => (
-                        <span key={g.id}
-                          className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium">
-                          {g.name}
-                        </span>
+                        <Tooltip key={g.id} text={`Grupa "${g.name}" aktywna w tym wpisie`}>
+                          <span
+                            className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded text-xs font-medium cursor-default">
+                            {g.name}
+                          </span>
+                        </Tooltip>
                       ))
                     : <span className="text-xs text-gray-300">brak</span>
                 )}
               </div>
 
               {/* Delete */}
-              <button
-                onClick={ev => { ev.stopPropagation(); del(e.id) }}
-                className="text-gray-300 hover:text-red-400 transition-colors shrink-0"
-              >
-                <Trash2 size={16} />
-              </button>
+              <Tooltip text="Wyczyść ten wpis harmonogramu">
+                <button
+                  onClick={ev => { ev.stopPropagation(); del(e.id) }}
+                  className="text-gray-300 hover:text-red-400 transition-colors shrink-0"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </Tooltip>
 
               {/* Expand arrow */}
-              <span className="text-gray-400 shrink-0">
-                {isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-              </span>
+              <Tooltip text={isOpen ? 'Zwiń edytor' : 'Rozwiń edytor'}>
+                <span className="text-gray-400 shrink-0">
+                  {isOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                </span>
+              </Tooltip>
             </div>
 
             {/* Edit form */}

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
 import { Play, Pencil, Save, X, Droplets, Plus, Trash2 } from 'lucide-react'
 import { apiGetGroups, apiSetGroup, apiDeleteGroup, apiActivateGroup, Group } from '../api/client'
+import { Tooltip } from '../components/Tooltip'
 
 const SECTIONS = [1, 2, 3, 4, 5, 6, 7, 8]
 
@@ -24,18 +25,19 @@ function GroupCard({
   const sections = SECTIONS.filter(s => group.section_mask & (1 << (s - 1)))
   const empty = sections.length === 0
 
-  // Pusta karta — "dodaj grupę"
   if (empty && group.name === `Grupa ${group.id}`) {
     return (
-      <button
-        onClick={() => onEdit(group)}
-        className="bg-white rounded-2xl border-2 border-dashed border-gray-200
-          hover:border-green-300 hover:bg-green-50 p-4 flex flex-col items-center
-          justify-center gap-2 transition-colors text-gray-400 hover:text-green-600 min-h-32"
-      >
-        <Plus size={24} />
-        <span className="text-sm font-medium">Dodaj grupę {group.id}</span>
-      </button>
+      <Tooltip text={`Skonfiguruj nową grupę nawadniania #${group.id}`} className="w-full">
+        <button
+          onClick={() => onEdit(group)}
+          className="bg-white rounded-2xl border-2 border-dashed border-gray-200
+            hover:border-green-300 hover:bg-green-50 p-4 flex flex-col items-center
+            justify-center gap-2 transition-colors text-gray-400 hover:text-green-600 min-h-32 w-full"
+        >
+          <Plus size={24} />
+          <span className="text-sm font-medium">Dodaj grupę {group.id}</span>
+        </button>
+      </Tooltip>
     )
   }
 
@@ -51,12 +53,14 @@ function GroupCard({
           </span>
           <span className="font-semibold text-gray-800">{group.name}</span>
         </div>
-        <button
-          onClick={() => onEdit(group)}
-          className="text-gray-400 hover:text-green-600 transition-colors"
-        >
-          <Pencil size={16} />
-        </button>
+        <Tooltip text={`Edytuj grupę "${group.name}"`}>
+          <button
+            onClick={() => onEdit(group)}
+            className="text-gray-400 hover:text-green-600 transition-colors"
+          >
+            <Pencil size={16} />
+          </button>
+        </Tooltip>
       </div>
 
       {/* Sekcje */}
@@ -73,17 +77,19 @@ function GroupCard({
       </div>
 
       {/* Activate */}
-      <button
-        onClick={() => onActivate(group.id)}
-        disabled={empty}
-        className={`flex items-center justify-center gap-2 rounded-xl py-2 text-sm font-medium
-          transition-colors ${empty
-            ? 'bg-gray-100 text-gray-300 cursor-not-allowed'
-            : 'bg-green-600 hover:bg-green-700 text-white shadow-sm'}`}
-      >
-        <Play size={15} />
-        Uruchom ({formatSec(duration)})
-      </button>
+      <Tooltip text={empty ? 'Brak sekcji w grupie' : `Uruchom wszystkie sekcje grupy na ${formatSec(duration)}`}>
+        <button
+          onClick={() => onActivate(group.id)}
+          disabled={empty}
+          className={`flex items-center justify-center gap-2 rounded-xl py-2 text-sm font-medium
+            transition-colors w-full ${empty
+              ? 'bg-gray-100 text-gray-300 cursor-not-allowed'
+              : 'bg-green-600 hover:bg-green-700 text-white shadow-sm'}`}
+        >
+          <Play size={15} />
+          Uruchom ({formatSec(duration)})
+        </button>
+      </Tooltip>
     </div>
   )
 }
@@ -128,46 +134,53 @@ function EditModal({
             {SECTIONS.map(s => {
               const on = !!(group.section_mask & (1 << (s - 1)))
               return (
-                <button
-                  key={s}
-                  onClick={() => set({ section_mask: group.section_mask ^ (1 << (s - 1)) })}
-                  className={`h-12 rounded-xl font-bold text-sm transition-colors
-                    ${on ? 'bg-green-500 text-white shadow-sm' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
-                >
-                  <Droplets size={12} className={`mx-auto mb-0.5 ${on ? 'text-white' : 'text-gray-400'}`} />
-                  S{s}
-                </button>
+                <Tooltip key={s} text={on ? `Usuń sekcję ${s} z grupy` : `Dodaj sekcję ${s} do grupy`}>
+                  <button
+                    onClick={() => set({ section_mask: group.section_mask ^ (1 << (s - 1)) })}
+                    className={`h-12 rounded-xl font-bold text-sm transition-colors w-full
+                      ${on ? 'bg-green-500 text-white shadow-sm' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                  >
+                    <Droplets size={12} className={`mx-auto mb-0.5 ${on ? 'text-white' : 'text-gray-400'}`} />
+                    S{s}
+                  </button>
+                </Tooltip>
               )
             })}
           </div>
         </div>
 
         <div className="flex gap-2 pt-1">
-          <button
-            onClick={onSave}
-            disabled={saving}
-            className="flex-1 flex items-center justify-center gap-1.5 bg-green-600 hover:bg-green-700
-              text-white py-2.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
-          >
-            <Save size={15} />
-            {saving ? 'Zapisywanie…' : 'Zapisz'}
-          </button>
-          {!isNew && (
+          <Tooltip text="Zapisz zmiany grupy" className="flex-1">
             <button
-              onClick={onDelete}
-              className="flex items-center justify-center gap-1.5 bg-red-50 hover:bg-red-100
-                text-red-500 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors"
+              onClick={onSave}
+              disabled={saving}
+              className="w-full flex items-center justify-center gap-1.5 bg-green-600 hover:bg-green-700
+                text-white py-2.5 rounded-xl text-sm font-medium transition-colors disabled:opacity-50"
             >
-              <Trash2 size={15} />
+              <Save size={15} />
+              {saving ? 'Zapisywanie…' : 'Zapisz'}
             </button>
+          </Tooltip>
+          {!isNew && (
+            <Tooltip text="Usuń tę grupę">
+              <button
+                onClick={onDelete}
+                className="flex items-center justify-center gap-1.5 bg-red-50 hover:bg-red-100
+                  text-red-500 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors"
+              >
+                <Trash2 size={15} />
+              </button>
+            </Tooltip>
           )}
-          <button
-            onClick={onCancel}
-            className="flex items-center justify-center gap-1.5 bg-gray-100 hover:bg-gray-200
-              text-gray-600 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors"
-          >
-            <X size={15} />
-          </button>
+          <Tooltip text="Anuluj bez zapisywania">
+            <button
+              onClick={onCancel}
+              className="flex items-center justify-center gap-1.5 bg-gray-100 hover:bg-gray-200
+                text-gray-600 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors"
+            >
+              <X size={15} />
+            </button>
+          </Tooltip>
         </div>
       </div>
     </div>
@@ -230,19 +243,22 @@ export default function Groups() {
 
       {/* Duration picker */}
       <div className="flex items-center gap-3 bg-white rounded-2xl shadow-sm border border-gray-100 p-3">
-        <span className="text-sm text-gray-600 shrink-0">Czas aktywacji:</span>
+        <Tooltip text="Czas trwania nawadniania przy uruchamianiu grupy">
+          <span className="text-sm text-gray-600 shrink-0 cursor-default">Czas aktywacji:</span>
+        </Tooltip>
         <div className="flex gap-1.5 flex-wrap">
           {DURATION_OPTS.map(s => (
-            <button
-              key={s}
-              onClick={() => setDur(s)}
-              className={`px-3 py-1 rounded-full text-xs font-medium transition-colors
-                ${duration === s
-                  ? 'bg-green-600 text-white shadow-sm'
-                  : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
-            >
-              {formatSec(s)}
-            </button>
+            <Tooltip key={s} text={`Ustaw czas aktywacji na ${formatSec(s)}`}>
+              <button
+                onClick={() => setDur(s)}
+                className={`px-3 py-1 rounded-full text-xs font-medium transition-colors
+                  ${duration === s
+                    ? 'bg-green-600 text-white shadow-sm'
+                    : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+              >
+                {formatSec(s)}
+              </button>
+            </Tooltip>
           ))}
         </div>
       </div>

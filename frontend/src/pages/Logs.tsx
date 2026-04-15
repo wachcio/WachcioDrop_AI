@@ -2,12 +2,13 @@ import { useEffect, useRef, useState } from 'react'
 import toast from 'react-hot-toast'
 import { RefreshCw, Trash2, Pause, Play } from 'lucide-react'
 import { apiGetLogs, apiClearLogs, LogEntry } from '../api/client'
+import { Tooltip } from '../components/Tooltip'
 
-const LEVEL_META: Record<number, { label: string; cls: string }> = {
-  3: { label: 'ERROR', cls: 'bg-red-100 text-red-700' },
-  4: { label: 'WARN',  cls: 'bg-yellow-100 text-yellow-700' },
-  6: { label: 'INFO',  cls: 'bg-blue-100 text-blue-600' },
-  7: { label: 'DEBUG', cls: 'bg-gray-100 text-gray-500' },
+const LEVEL_META: Record<number, { label: string; cls: string; desc: string }> = {
+  3: { label: 'ERROR', cls: 'bg-red-100 text-red-700',       desc: 'Błąd krytyczny — wymaga uwagi' },
+  4: { label: 'WARN',  cls: 'bg-yellow-100 text-yellow-700', desc: 'Ostrzeżenie — coś może być nie tak' },
+  6: { label: 'INFO',  cls: 'bg-blue-100 text-blue-600',     desc: 'Informacja diagnostyczna' },
+  7: { label: 'DEBUG', cls: 'bg-gray-100 text-gray-500',     desc: 'Szczegóły debugowania' },
 }
 
 function formatTs(unix: number): string {
@@ -34,9 +35,7 @@ export default function Logs() {
     } catch { /* silent */ }
   }
 
-  useEffect(() => {
-    load()
-  }, [])
+  useEffect(() => { load() }, [])
 
   useEffect(() => {
     if (paused) return
@@ -72,53 +71,59 @@ export default function Logs() {
 
         {/* Filtry poziomów */}
         <div className="flex gap-1.5 flex-wrap flex-1">
-          <button
-            onClick={() => setFilter(null)}
-            className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors
-              ${filter === null ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-          >
-            Wszystkie ({total})
-          </button>
+          <Tooltip text="Pokaż wszystkie wpisy logów">
+            <button
+              onClick={() => setFilter(null)}
+              className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors
+                ${filter === null ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+            >
+              Wszystkie ({total})
+            </button>
+          </Tooltip>
           {([3, 4, 6, 7] as number[]).map(lvl => {
             const m = LEVEL_META[lvl]
             const cnt = entries.filter(e => e.level === lvl).length
             return (
-              <button
-                key={lvl}
-                onClick={() => setFilter(filter === lvl ? null : lvl)}
-                className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors
-                  ${filter === lvl ? m.cls + ' ring-2 ring-offset-1 ring-current' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
-              >
-                {m.label} ({cnt})
-              </button>
+              <Tooltip key={lvl} text={`${m.desc} — pokaż tylko ${m.label}`}>
+                <button
+                  onClick={() => setFilter(filter === lvl ? null : lvl)}
+                  className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors
+                    ${filter === lvl ? m.cls + ' ring-2 ring-offset-1 ring-current' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                >
+                  {m.label} ({cnt})
+                </button>
+              </Tooltip>
             )
           })}
         </div>
 
         {/* Akcje */}
         <div className="flex gap-1.5 shrink-0">
-          <button
-            onClick={() => setPaused(p => !p)}
-            title={paused ? 'Wznów odświeżanie' : 'Zatrzymaj odświeżanie'}
-            className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors
-              ${paused ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
-          >
-            {paused ? <Play size={14} /> : <Pause size={14} />}
-          </button>
-          <button
-            onClick={load}
-            title="Odśwież"
-            className="w-8 h-8 rounded-xl bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 transition-colors"
-          >
-            <RefreshCw size={14} />
-          </button>
-          <button
-            onClick={clear}
-            title="Wyczyść"
-            className="w-8 h-8 rounded-xl bg-red-50 hover:bg-red-100 flex items-center justify-center text-red-500 transition-colors"
-          >
-            <Trash2 size={14} />
-          </button>
+          <Tooltip text={paused ? 'Wznów automatyczne odświeżanie co 3s' : 'Wstrzymaj automatyczne odświeżanie'}>
+            <button
+              onClick={() => setPaused(p => !p)}
+              className={`w-8 h-8 rounded-xl flex items-center justify-center transition-colors
+                ${paused ? 'bg-yellow-100 text-yellow-700' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+            >
+              {paused ? <Play size={14} /> : <Pause size={14} />}
+            </button>
+          </Tooltip>
+          <Tooltip text="Pobierz najnowsze logi z urządzenia">
+            <button
+              onClick={load}
+              className="w-8 h-8 rounded-xl bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 transition-colors"
+            >
+              <RefreshCw size={14} />
+            </button>
+          </Tooltip>
+          <Tooltip text="Wyczyść bufor logów (nieodwracalne)">
+            <button
+              onClick={clear}
+              className="w-8 h-8 rounded-xl bg-red-50 hover:bg-red-100 flex items-center justify-center text-red-500 transition-colors"
+            >
+              <Trash2 size={14} />
+            </button>
+          </Tooltip>
         </div>
       </div>
 
@@ -146,14 +151,16 @@ export default function Logs() {
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {filtered.map((e, i) => {
-                  const m = LEVEL_META[e.level] ?? { label: String(e.level), cls: 'bg-gray-100 text-gray-500' }
+                  const m = LEVEL_META[e.level] ?? { label: String(e.level), cls: 'bg-gray-100 text-gray-500', desc: '' }
                   return (
                     <tr key={i} className="hover:bg-gray-50 transition-colors">
                       <td className="px-3 py-1.5 font-mono text-gray-500 whitespace-nowrap">{formatTs(e.ts)}</td>
                       <td className="px-2 py-1.5">
-                        <span className={`px-1.5 py-0.5 rounded text-xs font-bold ${m.cls}`}>
-                          {m.label}
-                        </span>
+                        <Tooltip text={m.desc || m.label} pos="bottom">
+                          <span className={`px-1.5 py-0.5 rounded text-xs font-bold cursor-default ${m.cls}`}>
+                            {m.label}
+                          </span>
+                        </Tooltip>
                       </td>
                       <td className="px-2 py-1.5 font-mono text-gray-500">{e.tag}</td>
                       <td className="px-2 py-1.5 text-gray-700 break-all">{e.msg}</td>
