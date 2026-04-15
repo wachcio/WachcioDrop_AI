@@ -14,6 +14,7 @@
 #include "mqtt/mqtt_manager.h"
 #include "daily_check/daily_check.h"
 #include "logging/log_manager.h"
+#include "temperature/temperature.h"
 #include "esp_log.h"
 #include "esp_system.h"
 #include "esp_ota_ops.h"
@@ -83,6 +84,7 @@ void app_main(void)
     setenv("TZ", "CET-1CEST,M3.5.0,M10.5.0/3", 1);
     tzset();
     ESP_ERROR_CHECK(rtc_ds3231_init());
+    temperature_init();
 
     // ------------------------------------------------------------------
     // 5. Enkoder
@@ -165,6 +167,9 @@ void app_main(void)
     daily_check_init();
     xTaskCreate(daily_check_task, "daily_chk",
                 TASK_STACK_DAILY_CHECK, NULL, TASK_PRIO_DAILY_CHECK, NULL);
+
+    // Task temperatury DS18B20
+    xTaskCreate(temperature_task, "temp", 2048, NULL, TASK_PRIO_NTP, NULL);
 
     ESP_LOGI(TAG, "all tasks started");
 

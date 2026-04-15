@@ -57,6 +57,7 @@ export interface SystemStatus {
   time: string
   fw_version: string
   idf_version: string
+  temperature: number | null
   sections: SectionState[]
   groups: GroupStatus[]
 }

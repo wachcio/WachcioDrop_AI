@@ -18,6 +18,7 @@ idf_component_register(
         "mqtt/mqtt_manager.c"
         "daily_check/daily_check.c"
         "logging/log_manager.c"
+        "temperature/temperature.c"
 
     INCLUDE_DIRS
         "."
@@ -40,4 +41,6 @@ idf_component_register(
         ds3231
         ssd1306
         esp_psram
+        onewire
+        ds18x20
 )

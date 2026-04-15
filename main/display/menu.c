@@ -7,6 +7,7 @@
 #include "encoder/encoder.h"
 #include "storage/nvs_storage.h"
 #include "config.h"
+#include "temperature/temperature.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_log.h"
@@ -149,19 +150,25 @@ static void draw_info(void)
 
     int16_t temp = 0;
     rtc_get_temperature(&temp);
-    snprintf(buf, sizeof(buf), "Temp: %d.%02d C", temp / 100, abs(temp % 100));
+    snprintf(buf, sizeof(buf), "RTC: %d.%02d C", temp / 100, abs(temp % 100));
     display_text_full(3, buf, false);
+
+    if (temperature_available()) {
+        snprintf(buf, sizeof(buf), "DS18: %.1f C", temperature_get());
+    } else {
+        snprintf(buf, sizeof(buf), "DS18: --");
+    }
+    display_text_full(4, buf, false);
 
     uint32_t uptime = esp_timer_get_time() / 1000000;
     snprintf(buf, sizeof(buf), "Up: %luh %02lum",
              (unsigned long)(uptime / 3600),
              (unsigned long)((uptime % 3600) / 60));
-    display_text_full(4, buf, false);
+    display_text_full(5, buf, false);
 
     char tokbuf[20] = "Token:";
     strncat(tokbuf, g_config.api_token, sizeof(tokbuf) - 7);
-    display_text_full(5, tokbuf, false);
-    display_text_full(6, "", false);
+    display_text_full(6, tokbuf, false);
     display_text_full(7, "LNG=wyjdz", false);
 }
 

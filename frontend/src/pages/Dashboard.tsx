@@ -352,7 +352,7 @@ export default function Dashboard() {
 
       {/* Status bar */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4">
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
 
           <div className="flex items-center gap-2">
             <Clock size={16} className="text-gray-400 shrink-0" />
@@ -377,6 +377,16 @@ export default function Dashboard() {
 
           <div className="flex items-center gap-2">
             <Thermometer size={16} className="text-gray-400 shrink-0" />
+            <div>
+              <p className="text-xs text-gray-400">Temperatura</p>
+              <p className="text-sm font-semibold text-gray-800">
+                {status.temperature !== null ? `${status.temperature.toFixed(1)} °C` : '—'}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Clock size={16} className="text-gray-400 shrink-0" />
             <div>
               <p className="text-xs text-gray-400">Uptime</p>
               <p className="text-sm font-semibold text-gray-800">{formatUptime(status.uptime_sec)}</p>

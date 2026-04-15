@@ -24,6 +24,7 @@
 #include "esp_psram.h"
 #include "esp_system.h"
 #include "logging/log_manager.h"
+#include "temperature/temperature.h"
 #include <string.h>
 #include <stdlib.h>
 #include <time.h>
@@ -145,6 +146,12 @@ static esp_err_t handle_status(httpd_req_t *req)
     cJSON_AddBoolToObject(root,   "ignore_php",      g_config.ignore_php);
     cJSON_AddBoolToObject(root,   "php_url_set",     g_config.php_url[0] != '\0');
     cJSON_AddStringToObject(root, "time",           tstr);
+
+    if (temperature_available()) {
+        cJSON_AddNumberToObject(root, "temperature", (double)temperature_get());
+    } else {
+        cJSON_AddNullToObject(root, "temperature");
+    }
 
     // Wszystkie sekcje
     cJSON *sections_arr = cJSON_AddArrayToObject(root, "sections");
