@@ -97,9 +97,10 @@ void app_main(void)
 
     // Pokaż ekran startowy
     display_clear();
-    display_text(0, 2, "  Nawadnianie   ", false);
-    display_text(0, 3, "  v1.0 start... ", false);
-    vTaskDelay(pdMS_TO_TICKS(1000));
+    display_text(0, 1, " WachcioDrop    ", false);
+    display_text(0, 2, " v" FW_VERSION "          ", false);
+    display_text(0, 3, " Uruchamianie...", false);
+    vTaskDelay(pdMS_TO_TICKS(2000));
 
     // ------------------------------------------------------------------
     // 7. Harmonogram + grupy
