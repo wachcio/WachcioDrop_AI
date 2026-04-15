@@ -574,6 +574,9 @@ static esp_err_t handle_settings_get(httpd_req_t *req)
     cJSON_AddNumberToObject(root, "graylog_port",   g_config.graylog_port);
     cJSON_AddBoolToObject  (root, "graylog_enabled",g_config.graylog_enabled);
     cJSON_AddNumberToObject(root, "graylog_level",  g_config.graylog_level);
+    cJSON_AddBoolToObject  (root, "frost_protection_enabled",  g_config.frost_protection_enabled);
+    cJSON_AddNumberToObject(root, "frost_temp_threshold",      g_config.frost_temp_threshold);
+    cJSON_AddNumberToObject(root, "frost_recovery_delay_min",  g_config.frost_recovery_delay_min);
     // Nie zwracamy hasła i tokenu w GET
 
     char *s = cJSON_PrintUnformatted(root);
@@ -638,6 +641,12 @@ static esp_err_t handle_settings_post(httpd_req_t *req)
         g_config.graylog_enabled = cJSON_IsTrue(v);
     if ((v = cJSON_GetObjectItem(j, "graylog_level")))
         g_config.graylog_level = (uint8_t)v->valuedouble;
+    if ((v = cJSON_GetObjectItem(j, "frost_protection_enabled")))
+        g_config.frost_protection_enabled = cJSON_IsTrue(v);
+    if ((v = cJSON_GetObjectItem(j, "frost_temp_threshold")))
+        g_config.frost_temp_threshold = (int8_t)v->valuedouble;
+    if ((v = cJSON_GetObjectItem(j, "frost_recovery_delay_min")))
+        g_config.frost_recovery_delay_min = (uint16_t)v->valuedouble;
 
     cJSON_Delete(j);
     storage_save_config(&g_config);

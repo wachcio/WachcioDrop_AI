@@ -40,8 +40,11 @@ esp_err_t storage_load_config(app_config_t *cfg)
         strncpy(cfg->ntp_server, DEFAULT_NTP_SERVER, sizeof(cfg->ntp_server) - 1);
         cfg->timezone_offset  = 1;
         cfg->irrigation_today = true;
-        cfg->graylog_port     = 12201;
-        cfg->graylog_level    = 6;
+        cfg->graylog_port             = 12201;
+        cfg->graylog_level            = 6;
+        cfg->frost_protection_enabled  = false;
+        cfg->frost_temp_threshold      = 3;
+        cfg->frost_recovery_delay_min  = 60;
         ESP_LOGI(TAG, "config not found, using defaults");
         return ESP_OK;
     }
@@ -87,6 +90,18 @@ esp_err_t storage_load_config(app_config_t *cfg)
     cfg->graylog_level = 6; // INFO
     nvs_get_u8(h, NVS_KEY_GRAYLOG_LEVEL, &cfg->graylog_level);
 
+    uint8_t frost_en = 0;
+    nvs_get_u8(h, NVS_KEY_FROST_EN, &frost_en);
+    cfg->frost_protection_enabled = (bool)frost_en;
+
+    cfg->frost_temp_threshold = 3;
+    int8_t frost_temp = 3;
+    nvs_get_i8(h, NVS_KEY_FROST_TEMP, &frost_temp);
+    cfg->frost_temp_threshold = frost_temp;
+
+    cfg->frost_recovery_delay_min = 60;
+    nvs_get_u16(h, NVS_KEY_FROST_DELAY, &cfg->frost_recovery_delay_min);
+
     nvs_close(h);
     ESP_LOGI(TAG, "config loaded (ssid='%s' ntp='%s')",
              cfg->wifi_ssid, cfg->ntp_server);
@@ -117,6 +132,9 @@ esp_err_t storage_save_config(const app_config_t *cfg)
     nvs_set_u16(h, NVS_KEY_GRAYLOG_PORT, cfg->graylog_port);
     nvs_set_u8(h, NVS_KEY_GRAYLOG_EN,   (uint8_t)cfg->graylog_enabled);
     nvs_set_u8(h, NVS_KEY_GRAYLOG_LEVEL, cfg->graylog_level);
+    nvs_set_u8(h,  NVS_KEY_FROST_EN,    (uint8_t)cfg->frost_protection_enabled);
+    nvs_set_i8(h,  NVS_KEY_FROST_TEMP,  cfg->frost_temp_threshold);
+    nvs_set_u16(h, NVS_KEY_FROST_DELAY, cfg->frost_recovery_delay_min);
 
     err = nvs_commit(h);
     nvs_close(h);

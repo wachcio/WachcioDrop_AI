@@ -23,6 +23,9 @@
 #define NVS_KEY_GRAYLOG_PORT    "glog_port"
 #define NVS_KEY_GRAYLOG_EN      "glog_en"
 #define NVS_KEY_GRAYLOG_LEVEL   "glog_level"
+#define NVS_KEY_FROST_EN        "frost_en"
+#define NVS_KEY_FROST_TEMP      "frost_temp"
+#define NVS_KEY_FROST_DELAY     "frost_delay"
 
 typedef struct {
     char    wifi_ssid[64];
@@ -40,6 +43,9 @@ typedef struct {
     uint16_t graylog_port;
     bool    graylog_enabled;
     uint8_t graylog_level;     // LOG_LVL_* (6=INFO domyślnie)
+    bool     frost_protection_enabled;
+    int8_t   frost_temp_threshold;      // °C, domyślnie 3
+    uint16_t frost_recovery_delay_min;  // minuty opóźnienia reaktywacji, domyślnie 60
 } app_config_t;
 
 typedef struct {

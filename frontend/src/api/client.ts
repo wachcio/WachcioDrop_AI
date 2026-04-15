@@ -96,6 +96,9 @@ export interface Settings {
   graylog_port: number
   graylog_enabled: boolean
   graylog_level: number
+  frost_protection_enabled: boolean
+  frost_temp_threshold: number
+  frost_recovery_delay_min: number
 }
 
 // API calls

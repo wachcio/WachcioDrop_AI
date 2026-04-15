@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import toast from 'react-hot-toast'
-import { KeyRound, Wifi, Radio, Globe, Clock, Save, RefreshCw, SlidersHorizontal, Droplets, CloudOff, Antenna, Upload, AlertTriangle, CheckCircle, XCircle, Download, ArchiveRestore } from 'lucide-react'
+import { KeyRound, Wifi, Radio, Globe, Clock, Save, RefreshCw, SlidersHorizontal, Droplets, CloudOff, Antenna, Upload, AlertTriangle, CheckCircle, XCircle, Download, ArchiveRestore, Thermometer } from 'lucide-react'
 import { apiGetSettings, apiSaveSettings, apiGetTime, apiSetDateTime, apiGetStatus, apiSetIrrigation, apiSyncNtp, apiOtaUpload, apiSpiffsUpload, apiRestart, apiExportSettings, apiImportSettings, api, Settings, setToken, SystemStatus } from '../api/client'
 
 export type ScheduleMode = 'sections' | 'groups'
@@ -137,6 +137,7 @@ export default function SettingsPage() {
     wifi_ssid: '', mqtt_uri: '', mqtt_user: '', php_url: '',
     ntp_server: 'pool.ntp.org', tz_offset: 2,
     graylog_host: '', graylog_port: 12201, graylog_enabled: false, graylog_level: 6,
+    frost_protection_enabled: false, frost_temp_threshold: 3, frost_recovery_delay_min: 60,
   })
   const [pass, setPass]             = useState({ wifi: '', mqtt: '', token: '' })
   const [rtcTime, setRtcTime]       = useState('')
@@ -421,6 +422,84 @@ export default function SettingsPage() {
 
             <div className="border-t border-gray-100" />
 
+            {/* Ochrona przed mrozem */}
+            <div className="flex flex-col gap-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0
+                    ${cfg.frost_protection_enabled ? 'bg-blue-100' : 'bg-gray-100'}`}>
+                    <Thermometer size={18} className={cfg.frost_protection_enabled ? 'text-blue-600' : 'text-gray-400'} />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-gray-800">Ochrona przed mrozem</p>
+                    <p className="text-xs text-gray-400">
+                      Wyłącz nawadnianie gdy temperatura DS18B20 spadnie poniżej progu
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setCfg(c => ({ ...c, frost_protection_enabled: !c.frost_protection_enabled }))}
+                  className={`relative inline-flex w-12 h-6 rounded-full transition-colors shrink-0
+                    ${cfg.frost_protection_enabled ? 'bg-blue-500' : 'bg-gray-300'}`}
+                >
+                  <span className={`absolute top-1 left-1 w-4 h-4 bg-white rounded-full shadow
+                    transition-transform ${cfg.frost_protection_enabled ? 'translate-x-6' : ''}`} />
+                </button>
+              </div>
+
+              {cfg.frost_protection_enabled && (
+                <div className="flex flex-col gap-3 pl-12">
+                  <div className="flex items-center gap-3">
+                    <label className="text-sm text-gray-600 whitespace-nowrap w-44">
+                      Próg temperatury:
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setCfg(c => ({ ...c, frost_temp_threshold: c.frost_temp_threshold - 1 }))}
+                        className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 active:scale-90
+                          flex items-center justify-center text-gray-600 font-bold text-lg leading-none
+                          transition-all select-none"
+                      >−</button>
+                      <span className="text-base font-bold text-blue-700 w-16 text-center">
+                        {cfg.frost_temp_threshold} °C
+                      </span>
+                      <button
+                        onClick={() => setCfg(c => ({ ...c, frost_temp_threshold: c.frost_temp_threshold + 1 }))}
+                        className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 active:scale-90
+                          flex items-center justify-center text-gray-600 font-bold text-lg leading-none
+                          transition-all select-none"
+                      >+</button>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <label className="text-sm text-gray-600 whitespace-nowrap w-44">
+                      Opóźnienie reaktywacji:
+                    </label>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setCfg(c => ({ ...c, frost_recovery_delay_min: Math.max(1, c.frost_recovery_delay_min - 5) }))}
+                        className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 active:scale-90
+                          flex items-center justify-center text-gray-600 font-bold text-lg leading-none
+                          transition-all select-none"
+                      >−</button>
+                      <span className="text-base font-bold text-blue-700 w-16 text-center">
+                        {cfg.frost_recovery_delay_min} min
+                      </span>
+                      <button
+                        onClick={() => setCfg(c => ({ ...c, frost_recovery_delay_min: c.frost_recovery_delay_min + 5 }))}
+                        className="w-8 h-8 rounded-lg bg-gray-100 hover:bg-gray-200 active:scale-90
+                          flex items-center justify-center text-gray-600 font-bold text-lg leading-none
+                          transition-all select-none"
+                      >+</button>
+                    </div>
+                    <span className="text-xs text-gray-400">po wzroście powyżej progu</span>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="border-t border-gray-100" />
+
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="text-sm font-medium text-gray-800">Tryb harmonogramu</p>
@@ -450,6 +529,19 @@ export default function SettingsPage() {
                 </span>
               </div>
             </div>
+
+            <div className="border-t border-gray-100" />
+
+            <button
+              onClick={save}
+              disabled={saving}
+              className="flex items-center gap-2 bg-green-600 hover:bg-green-700 disabled:opacity-50
+                text-white px-4 py-2.5 rounded-xl text-sm font-medium transition-colors w-fit"
+            >
+              <Save size={15} />
+              {saving ? 'Zapisywanie…' : 'Zapisz ustawienia'}
+            </button>
+
           </div>
         )}
 

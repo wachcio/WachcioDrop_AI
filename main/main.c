@@ -169,7 +169,7 @@ void app_main(void)
                 TASK_STACK_DAILY_CHECK, NULL, TASK_PRIO_DAILY_CHECK, NULL);
 
     // Task temperatury DS18B20
-    xTaskCreate(temperature_task, "temp", 2048, NULL, TASK_PRIO_NTP, NULL);
+    xTaskCreate(temperature_task, "temp", TASK_STACK_TEMPERATURE, NULL, TASK_PRIO_NTP, NULL);
 
     ESP_LOGI(TAG, "all tasks started");
 
