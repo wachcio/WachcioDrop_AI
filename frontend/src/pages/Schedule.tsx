@@ -251,8 +251,12 @@ export default function Schedule() {
   const save = async () => {
     if (!editing) return
     setSaving(true)
+    // Wyczyść nieużywany mask zależnie od trybu
+    const payload: ScheduleEntry = mode === 'sections'
+      ? { ...editing, group_mask: 0 }
+      : { ...editing, section_mask: 0 }
     try {
-      await apiSetSchedule(editing.id, editing)
+      await apiSetSchedule(editing.id, payload)
       toast.success('Harmonogram zapisany')
       setExpanded(null)
       setEditing(null)
