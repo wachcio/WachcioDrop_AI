@@ -21,3 +21,6 @@ void mqtt_publish_irrigation_today(bool active);
 
 // Ochrona przed mrozem (aktywny stan)
 void mqtt_publish_frost_active(bool active);
+
+// Następne nawadnianie (sensor timestamp)
+void mqtt_publish_next_irrigation(void);

@@ -80,6 +80,12 @@ static void add_avail(cJSON *d)
 }
 
 // --------------------------------------------------------------------------
+// Forward declarations (needed by publish_ha_discovery)
+// --------------------------------------------------------------------------
+
+static void publish_ha_schedule_discovery(void);
+
+// --------------------------------------------------------------------------
 // HA Autodiscovery
 // --------------------------------------------------------------------------
 
@@ -281,6 +287,7 @@ static void publish_ha_discovery(void)
         cJSON_Delete(d);
     }
 
+    publish_ha_schedule_discovery();
     ESP_LOGI(TAG, "HA discovery published");
 }
 
@@ -289,6 +296,7 @@ static void publish_ha_discovery(void)
 // --------------------------------------------------------------------------
 
 static void mqtt_publish_group_states(void);
+static void mqtt_publish_schedule_states(void);
 
 // --------------------------------------------------------------------------
 // Publish section states
@@ -327,6 +335,157 @@ static void mqtt_publish_group_states(void)
         snprintf(topic, sizeof(topic), MQTT_PREFIX "/group/%d/state", grps[i].id);
         pub(topic, (grps[i].id == active_id) ? "ON" : "OFF", 0, 1);
     }
+}
+
+// --------------------------------------------------------------------------
+// Schedule: stan enabled/disabled
+// --------------------------------------------------------------------------
+
+static void mqtt_publish_schedule_states(void)
+{
+    if (!s_connected) return;
+    const schedule_entry_t *entries = schedule_get_all();
+    for (int i = 0; i < SCHEDULE_ENTRIES; i++) {
+        const schedule_entry_t *e = &entries[i];
+        if (e->days_mask == 0 && e->section_mask == 0 && e->group_mask == 0) continue;
+        char topic[80];
+        snprintf(topic, sizeof(topic),
+                 MQTT_PREFIX "/schedule/%d/enabled/state", e->id);
+        pub(topic, e->enabled ? "ON" : "OFF", 0, 1);
+    }
+}
+
+// --------------------------------------------------------------------------
+// Następne nawadnianie — obliczenie i publikacja
+// --------------------------------------------------------------------------
+
+static time_t calc_next_irrigation(void)
+{
+    time_t now = time(NULL);
+    if (now < 0) return 0;
+
+    struct tm tm_now;
+    localtime_r(&now, &tm_now);
+
+    const schedule_entry_t *entries = schedule_get_all();
+    time_t earliest = 0;
+
+    for (int day_offset = 0; day_offset < 8; day_offset++) {
+        struct tm tm_day  = tm_now;
+        tm_day.tm_mday   += day_offset;
+        tm_day.tm_isdst   = -1;
+        time_t t_day = mktime(&tm_day);
+        localtime_r(&t_day, &tm_day);
+
+        /* days_mask: bit0=Pon, bit6=Nie; tm_wday: 0=Nie, 1=Pon…6=Sob */
+        int mask_bit = (tm_day.tm_wday == 0) ? 6 : (tm_day.tm_wday - 1);
+
+        for (int i = 0; i < SCHEDULE_ENTRIES; i++) {
+            const schedule_entry_t *e = &entries[i];
+            if (!e->enabled)                           continue;
+            if (!(e->days_mask & (1 << mask_bit)))     continue;
+            if (e->section_mask == 0 && e->group_mask == 0) continue;
+
+            struct tm tm_run  = tm_day;
+            tm_run.tm_hour    = e->hour;
+            tm_run.tm_min     = e->minute;
+            tm_run.tm_sec     = 0;
+            tm_run.tm_isdst   = -1;
+            time_t t_run = mktime(&tm_run);
+
+            if (t_run <= now) continue;
+
+            if (earliest == 0 || t_run < earliest)
+                earliest = t_run;
+        }
+
+        if (earliest != 0) break;  // znaleziono najbliższy dzień — nie szukaj dalej
+    }
+
+    return earliest;
+}
+
+void mqtt_publish_next_irrigation(void)
+{
+    if (!s_connected) return;
+    time_t t = calc_next_irrigation();
+    if (t == 0) {
+        pub(MQTT_PREFIX "/schedule/next/state", "unavailable", 0, 1);
+        return;
+    }
+    struct tm tm_utc;
+    gmtime_r(&t, &tm_utc);
+    char ts[26], buf[32];
+    strftime(ts, sizeof(ts), "%Y-%m-%dT%H:%M:%S", &tm_utc);
+    snprintf(buf, sizeof(buf), "%s+00:00", ts);
+    pub(MQTT_PREFIX "/schedule/next/state", buf, 0, 1);
+}
+
+// --------------------------------------------------------------------------
+// Schedule HA autodiscovery
+// --------------------------------------------------------------------------
+
+static void publish_ha_schedule_discovery(void)
+{
+    if (!s_connected) return;
+    char topic[160];
+    const schedule_entry_t *entries = schedule_get_all();
+
+    for (int i = 0; i < SCHEDULE_ENTRIES; i++) {
+        const schedule_entry_t *e = &entries[i];
+        char obj[32];
+        snprintf(obj, sizeof(obj), "schedule_%d", e->id);
+        snprintf(topic, sizeof(topic),
+                 MQTT_HA_PREFIX "/switch/" DEVICE_ID "/%s/config", obj);
+
+        bool configured = (e->days_mask != 0) &&
+                          (e->section_mask != 0 || e->group_mask != 0);
+
+        if (!configured) {
+            pub(topic, "", 0, 1);   // pusty payload = usuń encję z HA
+            continue;
+        }
+
+        char name[48], uid[48];
+        snprintf(name, sizeof(name), "Harmonogram %d \xc2\xb7 %02d:%02d",
+                 e->id, e->hour, e->minute);
+        snprintf(uid,  sizeof(uid),  "%s_schedule_%d", DEVICE_ID, e->id);
+
+        char st[80], ct[80];
+        snprintf(st, sizeof(st), MQTT_PREFIX "/schedule/%d/enabled/state",   e->id);
+        snprintf(ct, sizeof(ct), MQTT_PREFIX "/schedule/%d/enabled/command", e->id);
+
+        cJSON *d = cJSON_CreateObject();
+        cJSON_AddStringToObject(d, "name",          name);
+        cJSON_AddStringToObject(d, "unique_id",     uid);
+        cJSON_AddStringToObject(d, "state_topic",   st);
+        cJSON_AddStringToObject(d, "command_topic", ct);
+        cJSON_AddStringToObject(d, "payload_on",    "ON");
+        cJSON_AddStringToObject(d, "payload_off",   "OFF");
+        cJSON_AddStringToObject(d, "icon",          "mdi:clock-outline");
+        add_avail(d);
+        cJSON_AddItemToObject(d, "device", make_device_json());
+        pub_json(topic, d, 1, 1);
+        cJSON_Delete(d);
+    }
+
+    // Sensor "następne nawadnianie"
+    snprintf(topic, sizeof(topic),
+             MQTT_HA_PREFIX "/sensor/" DEVICE_ID "/next_irrigation/config");
+    {
+        cJSON *d = cJSON_CreateObject();
+        cJSON_AddStringToObject(d, "name",        "Nast\xc4\x99pne nawadnianie");
+        cJSON_AddStringToObject(d, "unique_id",   DEVICE_ID "_next_irrigation");
+        cJSON_AddStringToObject(d, "state_topic", MQTT_PREFIX "/schedule/next/state");
+        cJSON_AddStringToObject(d, "device_class","timestamp");
+        cJSON_AddStringToObject(d, "icon",        "mdi:calendar-clock");
+        add_avail(d);
+        cJSON_AddItemToObject(d, "device", make_device_json());
+        pub_json(topic, d, 1, 1);
+        cJSON_Delete(d);
+    }
+
+    ESP_LOGI(TAG, "HA schedule discovery published");
 }
 
 // --------------------------------------------------------------------------
@@ -390,6 +549,9 @@ void mqtt_publish_status(void)
     // Temperatura (jeśli dostępna)
     if (temperature_available())
         mqtt_publish_temperature(temperature_get(), true);
+
+    // Następne nawadnianie
+    mqtt_publish_next_irrigation();
 }
 
 // --------------------------------------------------------------------------
@@ -544,6 +706,25 @@ static void handle_command(const char *topic, const char *data, int data_len)
         goto done;
     }
 
+    // ── Harmonogram — włącz/wyłącz wpis z HA ────────────────────────────
+    {
+        int sched_id = -1;
+        if (sscanf(topic, MQTT_PREFIX "/schedule/%d/enabled/command", &sched_id) == 1) {
+            if (sched_id >= 0 && sched_id < SCHEDULE_ENTRIES) {
+                const schedule_entry_t *all = schedule_get_all();
+                schedule_entry_t e = all[sched_id];
+                e.enabled = (strcmp(payload, "ON") == 0);
+                schedule_set(&e);
+                char st[80];
+                snprintf(st, sizeof(st),
+                         MQTT_PREFIX "/schedule/%d/enabled/state", sched_id);
+                pub(st, e.enabled ? "ON" : "OFF", 0, 1);
+                mqtt_publish_next_irrigation();
+            }
+            goto done;
+        }
+    }
+
     // ── Harmonogram — lista ───────────────────────────────────────────────
     if (strcmp(topic, MQTT_PREFIX "/schedule/get") == 0) {
         const schedule_entry_t *entries = schedule_get_all();
@@ -608,6 +789,9 @@ static void handle_command(const char *topic, const char *data, int data_len)
                     schedule_set(&entry);
                     cJSON_Delete(j);
                     pub(MQTT_PREFIX "/schedule/set/result", "{\"ok\":true}", 0, 0);
+                    publish_ha_schedule_discovery();
+                    mqtt_publish_schedule_states();
+                    mqtt_publish_next_irrigation();
                 }
             }
             goto done;
@@ -621,6 +805,9 @@ static void handle_command(const char *topic, const char *data, int data_len)
             if (sched_id >= 0 && sched_id < SCHEDULE_ENTRIES) {
                 schedule_delete((uint8_t)sched_id);
                 pub(MQTT_PREFIX "/schedule/delete/result", "{\"ok\":true}", 0, 0);
+                publish_ha_schedule_discovery();
+                mqtt_publish_schedule_states();
+                mqtt_publish_next_irrigation();
             }
             goto done;
         }
@@ -792,6 +979,7 @@ static void mqtt_event_handler(void *arg, esp_event_base_t base,
         esp_mqtt_client_subscribe(s_client, MQTT_PREFIX "/schedule/set", 0);
         esp_mqtt_client_subscribe(s_client, MQTT_PREFIX "/schedule/+/set", 0);
         esp_mqtt_client_subscribe(s_client, MQTT_PREFIX "/schedule/+/delete", 0);
+        esp_mqtt_client_subscribe(s_client, MQTT_PREFIX "/schedule/+/enabled/command", 0);
 
         // Czas
         esp_mqtt_client_subscribe(s_client, MQTT_PREFIX "/time/get", 0);
@@ -807,6 +995,8 @@ static void mqtt_event_handler(void *arg, esp_event_base_t base,
         publish_ha_discovery();
         mqtt_publish_all_states();
         mqtt_publish_status();
+        mqtt_publish_schedule_states();
+        mqtt_publish_next_irrigation();
         break;
 
     case MQTT_EVENT_DISCONNECTED:
