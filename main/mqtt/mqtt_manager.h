@@ -24,6 +24,3 @@ void mqtt_publish_frost_active(bool active);
 
 // Następne nawadnianie (sensor timestamp)
 void mqtt_publish_next_irrigation(void);
-
-// Synchronizacja harmonogramu po zmianie (discovery + stany + następne nawadnianie)
-void mqtt_notify_schedule_changed(void);
