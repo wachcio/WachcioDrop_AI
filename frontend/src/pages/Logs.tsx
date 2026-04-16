@@ -128,12 +128,13 @@ export default function Logs() {
       </div>
 
       {/* Log list */}
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden h-[75vh]">
         {filtered.length === 0 ? (
           <div className="p-8 text-center text-gray-400 text-sm">Brak wpisów</div>
         ) : (
           <div
-            className="overflow-y-auto max-h-[75vh]"
+            className="overflow-y-auto"
+            style={{ height: 'stretch' }}
             onScroll={e => {
               const el = e.currentTarget
               const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40
