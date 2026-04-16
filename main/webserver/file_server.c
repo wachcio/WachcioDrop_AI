@@ -57,7 +57,13 @@ static esp_err_t serve_file(httpd_req_t *req, const char *filepath)
     if (!f) return ESP_ERR_NOT_FOUND;
 
     httpd_resp_set_type(req, get_content_type(filepath));
-    httpd_resp_set_hdr(req, "Cache-Control", "max-age=86400");
+    // index.html nigdy nie cachować — odwołuje się do hashowanych assetów,
+    // po aktualizacji SPIFFS przeglądarka musi pobrać nową wersję
+    if (strstr(filepath, "index.html")) {
+        httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    } else {
+        httpd_resp_set_hdr(req, "Cache-Control", "max-age=86400");
+    }
 
     char *buf = malloc(SCRATCH_BUFSIZE);
     if (!buf) { fclose(f); return ESP_ERR_NO_MEM; }
