@@ -72,49 +72,27 @@ static esp_err_t serve_file(httpd_req_t *req, const char *filepath)
     return ESP_OK;
 }
 
-static esp_err_t serve_index(httpd_req_t *req)
-{
-    const char *path = SPIFFS_BASE "/index.html";
-    FILE *f = fopen(path, "r");
-    if (!f) {
-        httpd_resp_set_status(req, "404 Not Found");
-        httpd_resp_send(req, "Not Found", 9);
-        return ESP_OK;
-    }
-    httpd_resp_set_type(req, "text/html");
-    // index.html nigdy nie cachować — odwołuje się do hashowanych assetów
-    // i po aktualizacji SPIFFS przeglądarka musi pobrać nową wersję
-    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
-    char *buf = malloc(SCRATCH_BUFSIZE);
-    if (buf) {
-        size_t n;
-        while ((n = fread(buf, 1, SCRATCH_BUFSIZE, f)) > 0)
-            httpd_resp_send_chunk(req, buf, n);
-        httpd_resp_send_chunk(req, NULL, 0);
-        free(buf);
-    }
-    fclose(f);
-    return ESP_OK;
-}
-
 static esp_err_t static_handler(httpd_req_t *req)
 {
+    // filepath musi pomieścić SPIFFS_BASE (7) + MAX_URI_LEN (512) + null
+    char filepath[520];
     const char *uri = req->uri;
 
-    // Strona główna i wszystkie ścieżki SPA bez rozszerzenia → index.html
-    if (strcmp(uri, "/") == 0 || strrchr(uri, '.') == NULL) {
-        return serve_index(req);
-    }
+    // Ogranicz URI do bezpiecznej długości
+    const char *file_part = (strcmp(uri, "/") == 0) ? "/index.html" : uri;
+    // snprintf z gwarantowanym rozmiarem - poniżej 520 bajtów
+    snprintf(filepath, sizeof(filepath), SPIFFS_BASE "%.511s", file_part);
 
-    // Pliki statyczne (assets z rozszerzeniem)
-    char filepath[520];
-    snprintf(filepath, sizeof(filepath), SPIFFS_BASE "%.511s", uri);
+    struct stat st;
+    if (stat(filepath, &st) != 0) {
+        // Fallback do index.html dla React Router
+        snprintf(filepath, sizeof(filepath), SPIFFS_BASE "/index.html");
+    }
 
     esp_err_t err = serve_file(req, filepath);
     if (err == ESP_ERR_NOT_FOUND) {
-        // Ostatni fallback — może to SPA route z kropką w nazwie
-        return serve_index(req);
+        httpd_resp_set_status(req, "404 Not Found");
+        httpd_resp_send(req, "404 Not Found", 13);
     }
     return ESP_OK;
 }

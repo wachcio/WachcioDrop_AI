@@ -217,20 +217,10 @@ export default function Schedule() {
   const load = () => apiGetSchedule().then(r => setEntries(r.data))
 
   useEffect(() => {
-    let mounted = true
-
-    apiGetGroups().then(r => { if (mounted) setGroups(r.data) }).catch(() => {})
-
-    const tick = () => {
-      if (!mounted) return
-      apiGetSchedule()
-        .then(r  => { if (mounted) setEntries(r.data) })
-        .catch(() => {})
-        .finally(() => { if (mounted) setTimeout(tick, 5_000) })
-    }
-
-    tick()
-    return () => { mounted = false }
+    load()
+    apiGetGroups().then(r => setGroups(r.data)).catch(() => {})
+    const interval = setInterval(load, 10_000)
+    return () => clearInterval(interval)
   }, [])
 
   useEffect(() => {
