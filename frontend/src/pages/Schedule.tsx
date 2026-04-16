@@ -291,7 +291,7 @@ export default function Schedule() {
           >
             {/* Row */}
             <div
-              className="flex items-center gap-3 p-3 cursor-pointer select-none"
+              className="flex items-center gap-3 p-3 cursor-pointer select-none rounded-2xl transition-colors duration-200 hover:bg-green-50"
               onClick={() => expandRow(e.id, e)}
             >
               {/* Toggle */}
