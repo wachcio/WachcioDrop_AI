@@ -87,10 +87,12 @@ static void check_and_fire(const struct tm *now)
         if (e->hour != now->tm_hour) continue;
         if (e->minute != now->tm_min) continue;
 
-        // Wyznacz sekcje z maski sekcji + rozwinięcie grup
-        uint8_t final_mask = e->section_mask;
+        // Tryb grup: rozwiń grupy → sekcje; tryb sekcji: użyj section_mask
+        uint8_t final_mask;
         if (e->group_mask) {
-            final_mask |= groups_expand_mask(e->group_mask);
+            final_mask = groups_expand_mask(e->group_mask);
+        } else {
+            final_mask = e->section_mask;
         }
 
         if (final_mask) {
