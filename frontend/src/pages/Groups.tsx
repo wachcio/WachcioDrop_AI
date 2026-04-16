@@ -42,7 +42,7 @@ function GroupCard({
   }
 
   return (
-    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex flex-col gap-3">
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 flex flex-col gap-3 transition-colors duration-200 hover:bg-green-50">
 
       {/* Header */}
       <div className="flex items-center justify-between">
