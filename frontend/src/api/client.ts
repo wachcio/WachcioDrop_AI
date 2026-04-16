@@ -15,14 +15,11 @@ export const api = axios.create({
   timeout: 10000,
 })
 
-// Dołącz Bearer token + cache-busting do każdego żądania
+// Dołącz Bearer token do każdego żądania
 api.interceptors.request.use((config) => {
   const token = getToken()
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
-  }
-  if (config.method?.toLowerCase() === 'get') {
-    config.params = { ...config.params, _t: Date.now() }
   }
   return config
 })
