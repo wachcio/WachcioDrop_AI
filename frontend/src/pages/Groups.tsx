@@ -192,7 +192,7 @@ function EditModal({
 export default function Groups() {
   const [groups,   setGroups]  = useState<Group[]>([])
   const [editing,  setEditing] = useState<Group | null>(null)
-  const [duration, setDur]     = useState(300)
+  const [duration, setDur]     = useState(1200)
   const [saving,   setSaving]  = useState(false)
 
   const load = () => apiGetGroups().then(r => setGroups(r.data))
@@ -236,7 +236,7 @@ export default function Groups() {
     }
   }
 
-  const DURATION_OPTS = [60, 120, 300, 600, 900, 1800, 3600]
+  const DURATION_OPTS = [60, 120, 300, 600, 900, 1200, 1800, 2700, 3600]
 
   return (
     <div className="flex flex-col gap-4">

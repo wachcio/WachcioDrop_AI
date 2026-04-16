@@ -247,7 +247,7 @@ function DurationSlider({ value, onChange }: { value: number; onChange: (v: numb
 
 export default function Dashboard() {
   const [status,   setStatus]   = useState<SystemStatus | null>(null)
-  const [duration, setDuration] = useState(300)
+  const [duration, setDuration] = useState(1200)
   const [loading,  setLoading]  = useState(true)
   const [errMsg,   setErrMsg]   = useState('')
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null)
