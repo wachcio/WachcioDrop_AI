@@ -12,6 +12,7 @@
 #endif
 #include "schedule/schedule.h"
 #include "groups/groups.h"
+#include "mqtt/mqtt_manager.h"
 #include "storage/nvs_storage.h"
 #include "rtc/rtc.h"
 #include "ntp/ntp.h"
@@ -411,6 +412,7 @@ static esp_err_t handle_schedule_put(httpd_req_t *req)
     cJSON_Delete(j);
 
     schedule_set(&entry);
+    mqtt_notify_schedule_changed();
     APP_LOGI("api", "Harmonogram #%d: %s dni=0x%02X %02d:%02d czas=%us sek=0x%02X grp=0x%04X",
              id, entry.enabled ? "wł" : "wył",
              entry.days_mask, entry.hour, entry.minute,
@@ -431,6 +433,7 @@ static esp_err_t handle_schedule_delete(httpd_req_t *req)
         return ESP_OK;
     }
     schedule_delete((uint8_t)id);
+    mqtt_notify_schedule_changed();
     APP_LOGI("api", "Harmonogram #%d: usunięty", id);
     JSON_RESP(req, "{\"ok\":true}");
     return ESP_OK;

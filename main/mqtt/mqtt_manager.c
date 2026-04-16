@@ -421,6 +421,14 @@ void mqtt_publish_next_irrigation(void)
     pub(MQTT_PREFIX "/schedule/next/state", buf, 0, 1);
 }
 
+void mqtt_notify_schedule_changed(void)
+{
+    if (!s_connected) return;
+    publish_ha_schedule_discovery();
+    mqtt_publish_schedule_states();
+    mqtt_publish_next_irrigation();
+}
+
 // --------------------------------------------------------------------------
 // Schedule HA autodiscovery
 // --------------------------------------------------------------------------
