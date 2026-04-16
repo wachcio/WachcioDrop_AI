@@ -219,8 +219,8 @@ export default function Schedule() {
   useEffect(() => {
     load()
     apiGetGroups().then(r => setGroups(r.data)).catch(() => {})
-    const interval = setInterval(load, 10_000)
-    return () => clearInterval(interval)
+    const t = setInterval(load, 5_000)
+    return () => clearInterval(t)
   }, [])
 
   useEffect(() => {

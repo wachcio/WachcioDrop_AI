@@ -41,6 +41,7 @@ extern bool         g_irrigation_today;
 
 #define JSON_RESP(req, json_str) do { \
     httpd_resp_set_type(req, "application/json"); \
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store"); \
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*"); \
     httpd_resp_send(req, json_str, strlen(json_str)); \
 } while(0)
