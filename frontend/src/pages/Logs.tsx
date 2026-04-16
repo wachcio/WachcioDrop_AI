@@ -133,7 +133,7 @@ export default function Logs() {
           <div className="p-8 text-center text-gray-400 text-sm">Brak wpisów</div>
         ) : (
           <div
-            className="overflow-y-auto max-h-[60vh]"
+            className="overflow-y-auto max-h-[75vh]"
             onScroll={e => {
               const el = e.currentTarget
               const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 40
