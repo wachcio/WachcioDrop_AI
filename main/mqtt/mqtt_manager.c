@@ -7,6 +7,7 @@
 #include "storage/nvs_storage.h"
 #include "rtc/rtc.h"
 #include "ntp/ntp.h"
+#include "temperature/temperature.h"
 #include "config.h"
 #include "mqtt_client.h"
 #include "cJSON.h"
@@ -29,10 +30,11 @@ static SemaphoreHandle_t        s_mutex;
 extern app_config_t g_config;
 extern bool         g_irrigation_today;
 
-#define MQTT_PREFIX     "wachciodrop"
-#define MQTT_HA_PREFIX  "homeassistant"
-#define DEVICE_NAME     "WachcioDrop"
-#define DEVICE_ID       "wachciodrop_esp32s3"
+#define MQTT_PREFIX      "wachciodrop"
+#define MQTT_HA_PREFIX   "homeassistant"
+#define MQTT_AVAIL_TOPIC  MQTT_PREFIX "/availability"
+#define DEVICE_NAME      "WachcioDrop"
+#define DEVICE_ID        "wachciodrop_esp32s3"
 
 // --------------------------------------------------------------------------
 // Publish helpers
@@ -54,6 +56,30 @@ static void pub_json(const char *topic, cJSON *root, int qos, int retain)
 }
 
 // --------------------------------------------------------------------------
+// HA discovery helpers
+// --------------------------------------------------------------------------
+
+static cJSON *make_device_json(void)
+{
+    cJSON *dev = cJSON_CreateObject();
+    cJSON *ids = cJSON_CreateArray();
+    cJSON_AddItemToArray(ids, cJSON_CreateString(DEVICE_ID));
+    cJSON_AddItemToObject(dev, "identifiers",  ids);
+    cJSON_AddStringToObject(dev, "name",         DEVICE_NAME);
+    cJSON_AddStringToObject(dev, "model",        "ESP32-S3 N16R8");
+    cJSON_AddStringToObject(dev, "manufacturer", "Custom");
+    cJSON_AddStringToObject(dev, "sw_version",   FW_VERSION);
+    return dev;
+}
+
+static void add_avail(cJSON *d)
+{
+    cJSON_AddStringToObject(d, "availability_topic",    MQTT_AVAIL_TOPIC);
+    cJSON_AddStringToObject(d, "payload_available",     "online");
+    cJSON_AddStringToObject(d, "payload_not_available", "offline");
+}
+
+// --------------------------------------------------------------------------
 // HA Autodiscovery
 // --------------------------------------------------------------------------
 
@@ -61,61 +87,208 @@ static void publish_ha_discovery(void)
 {
     if (!s_connected) return;
 
-    char topic[128];
+    char topic[160];
 
+    // ── Sekcje + master ────────────────────────────────────────────────────
     for (int i = 0; i <= SECTIONS_COUNT; i++) {
-        char sec_name[32];
+        char name[32], uid[48], obj[32];
         if (i == 0) {
-            strncpy(sec_name, "Master", sizeof(sec_name));
+            snprintf(name, sizeof(name), "Master");
+            snprintf(uid,  sizeof(uid),  "%s_master",    DEVICE_ID);
+            snprintf(obj,  sizeof(obj),  "section_master");
         } else {
-            snprintf(sec_name, sizeof(sec_name), "Sekcja %d", i);
-        }
-
-        char uid[32], obj_id[32];
-        if (i == 0) {
-            snprintf(uid,    sizeof(uid),    "%s_master", DEVICE_ID);
-            snprintf(obj_id, sizeof(obj_id), "section_master");
-        } else {
-            snprintf(uid,    sizeof(uid),    "%s_s%d", DEVICE_ID, i);
-            snprintf(obj_id, sizeof(obj_id), "section_%d", i);
+            snprintf(name, sizeof(name), "Sekcja %d", i);
+            snprintf(uid,  sizeof(uid),  "%s_s%d", DEVICE_ID, i);
+            snprintf(obj,  sizeof(obj),  "section_%d", i);
         }
 
         snprintf(topic, sizeof(topic),
-                 MQTT_HA_PREFIX "/switch/" DEVICE_ID "/%s/config", obj_id);
+                 MQTT_HA_PREFIX "/switch/" DEVICE_ID "/%s/config", obj);
 
         cJSON *d = cJSON_CreateObject();
-        cJSON_AddStringToObject(d, "name",      sec_name);
+        cJSON_AddStringToObject(d, "name",      name);
         cJSON_AddStringToObject(d, "unique_id", uid);
-        cJSON_AddStringToObject(d, "platform",  "mqtt");
-        if (i == 0) {
-            cJSON_AddStringToObject(d, "state_topic",
-                MQTT_PREFIX "/section/master/state");
-        } else {
-            char st[64]; snprintf(st, sizeof(st),
-                MQTT_PREFIX "/section/%d/state", i);
-            cJSON_AddStringToObject(d, "state_topic", st);
-            char ct[64]; snprintf(ct, sizeof(ct),
-                MQTT_PREFIX "/section/%d/command", i);
+
+        // state topic
+        char st[64];
+        if (i == 0)
+            snprintf(st, sizeof(st), MQTT_PREFIX "/section/master/state");
+        else
+            snprintf(st, sizeof(st), MQTT_PREFIX "/section/%d/state", i);
+        cJSON_AddStringToObject(d, "state_topic", st);
+
+        // command topic (master jest read-only)
+        if (i != 0) {
+            char ct[64];
+            snprintf(ct, sizeof(ct), MQTT_PREFIX "/section/%d/command", i);
             cJSON_AddStringToObject(d, "command_topic", ct);
         }
+
         cJSON_AddStringToObject(d, "payload_on",  "ON");
         cJSON_AddStringToObject(d, "payload_off", "OFF");
-        cJSON_AddStringToObject(d, "availability_topic", MQTT_PREFIX "/status");
-        cJSON_AddStringToObject(d, "payload_available",     "{\"online\":true}");
-        cJSON_AddStringToObject(d, "payload_not_available", "{\"online\":false}");
-
-        cJSON *dev = cJSON_CreateObject();
-        cJSON_AddStringToObject(dev, "identifiers",  DEVICE_ID);
-        cJSON_AddStringToObject(dev, "name",         DEVICE_NAME);
-        cJSON_AddStringToObject(dev, "model",        "ESP32-S3 N16R8");
-        cJSON_AddStringToObject(dev, "manufacturer", "Custom");
-        cJSON_AddItemToObject(d, "device", dev);
+        cJSON_AddStringToObject(d, "icon",        "mdi:water");
+        add_avail(d);
+        cJSON_AddItemToObject(d, "device", make_device_json());
 
         pub_json(topic, d, 1, 1);
         cJSON_Delete(d);
     }
+
+    // ── Grupy ──────────────────────────────────────────────────────────────
+    const irrigation_group_t *grps = groups_get_all();
+    for (int i = 0; i < GROUPS_MAX; i++) {
+        if (grps[i].section_mask == 0) continue;   // pomiń niezdefiniowane
+
+        char uid[48], obj[32];
+        snprintf(uid, sizeof(uid), "%s_group_%d", DEVICE_ID, grps[i].id);
+        snprintf(obj, sizeof(obj), "group_%d", grps[i].id);
+
+        snprintf(topic, sizeof(topic),
+                 MQTT_HA_PREFIX "/switch/" DEVICE_ID "/%s/config", obj);
+
+        char st[64], ct[64];
+        snprintf(st, sizeof(st), MQTT_PREFIX "/group/%d/state",   grps[i].id);
+        snprintf(ct, sizeof(ct), MQTT_PREFIX "/group/%d/command", grps[i].id);
+
+        cJSON *d = cJSON_CreateObject();
+        cJSON_AddStringToObject(d, "name",          grps[i].name);
+        cJSON_AddStringToObject(d, "unique_id",     uid);
+        cJSON_AddStringToObject(d, "state_topic",   st);
+        cJSON_AddStringToObject(d, "command_topic", ct);
+        cJSON_AddStringToObject(d, "payload_on",    "ON");
+        cJSON_AddStringToObject(d, "payload_off",   "OFF");
+        cJSON_AddStringToObject(d, "icon",          "mdi:sprinkler-variant");
+        add_avail(d);
+        cJSON_AddItemToObject(d, "device", make_device_json());
+
+        pub_json(topic, d, 1, 1);
+        cJSON_Delete(d);
+    }
+
+    // ── Nawadnianie dziś ───────────────────────────────────────────────────
+    snprintf(topic, sizeof(topic),
+             MQTT_HA_PREFIX "/switch/" DEVICE_ID "/irrigation_today/config");
+
+    {
+        cJSON *d = cJSON_CreateObject();
+        cJSON_AddStringToObject(d, "name",          "Nawadnianie dziś");
+        cJSON_AddStringToObject(d, "unique_id",     DEVICE_ID "_irrigation_today");
+        cJSON_AddStringToObject(d, "state_topic",   MQTT_PREFIX "/irrigation/today/state");
+        cJSON_AddStringToObject(d, "command_topic", MQTT_PREFIX "/irrigation/today/command");
+        cJSON_AddStringToObject(d, "payload_on",    "ON");
+        cJSON_AddStringToObject(d, "payload_off",   "OFF");
+        cJSON_AddStringToObject(d, "icon",          "mdi:calendar-check");
+        add_avail(d);
+        cJSON_AddItemToObject(d, "device", make_device_json());
+        pub_json(topic, d, 1, 1);
+        cJSON_Delete(d);
+    }
+
+    // ── Ochrona przed mrozem — przełącznik ────────────────────────────────
+    snprintf(topic, sizeof(topic),
+             MQTT_HA_PREFIX "/switch/" DEVICE_ID "/frost_protection/config");
+
+    {
+        cJSON *d = cJSON_CreateObject();
+        cJSON_AddStringToObject(d, "name",          "Ochrona przed mrozem");
+        cJSON_AddStringToObject(d, "unique_id",     DEVICE_ID "_frost_protection");
+        cJSON_AddStringToObject(d, "state_topic",   MQTT_PREFIX "/frost/protection/state");
+        cJSON_AddStringToObject(d, "command_topic", MQTT_PREFIX "/frost/protection/command");
+        cJSON_AddStringToObject(d, "payload_on",    "ON");
+        cJSON_AddStringToObject(d, "payload_off",   "OFF");
+        cJSON_AddStringToObject(d, "icon",          "mdi:snowflake-alert");
+        add_avail(d);
+        cJSON_AddItemToObject(d, "device", make_device_json());
+        pub_json(topic, d, 1, 1);
+        cJSON_Delete(d);
+    }
+
+    // ── Mróz aktywny — binary sensor ──────────────────────────────────────
+    snprintf(topic, sizeof(topic),
+             MQTT_HA_PREFIX "/binary_sensor/" DEVICE_ID "/frost_active/config");
+
+    {
+        cJSON *d = cJSON_CreateObject();
+        cJSON_AddStringToObject(d, "name",          "Mróz aktywny");
+        cJSON_AddStringToObject(d, "unique_id",     DEVICE_ID "_frost_active");
+        cJSON_AddStringToObject(d, "state_topic",   MQTT_PREFIX "/frost/active/state");
+        cJSON_AddStringToObject(d, "payload_on",    "ON");
+        cJSON_AddStringToObject(d, "payload_off",   "OFF");
+        cJSON_AddStringToObject(d, "device_class",  "cold");
+        cJSON_AddStringToObject(d, "icon",          "mdi:snowflake");
+        add_avail(d);
+        cJSON_AddItemToObject(d, "device", make_device_json());
+        pub_json(topic, d, 1, 1);
+        cJSON_Delete(d);
+    }
+
+    // ── Temperatura DS18B20 ────────────────────────────────────────────────
+    snprintf(topic, sizeof(topic),
+             MQTT_HA_PREFIX "/sensor/" DEVICE_ID "/temperature/config");
+
+    {
+        cJSON *d = cJSON_CreateObject();
+        cJSON_AddStringToObject(d, "name",                "Temperatura DS18B20");
+        cJSON_AddStringToObject(d, "unique_id",           DEVICE_ID "_temperature");
+        cJSON_AddStringToObject(d, "state_topic",         MQTT_PREFIX "/sensor/temperature/state");
+        cJSON_AddStringToObject(d, "unit_of_measurement", "°C");
+        cJSON_AddStringToObject(d, "device_class",        "temperature");
+        cJSON_AddStringToObject(d, "state_class",         "measurement");
+        cJSON_AddStringToObject(d, "icon",                "mdi:thermometer");
+        add_avail(d);
+        cJSON_AddItemToObject(d, "device", make_device_json());
+        pub_json(topic, d, 1, 1);
+        cJSON_Delete(d);
+    }
+
+    // ── WiFi RSSI ──────────────────────────────────────────────────────────
+    snprintf(topic, sizeof(topic),
+             MQTT_HA_PREFIX "/sensor/" DEVICE_ID "/rssi/config");
+
+    {
+        cJSON *d = cJSON_CreateObject();
+        cJSON_AddStringToObject(d, "name",                "WiFi RSSI");
+        cJSON_AddStringToObject(d, "unique_id",           DEVICE_ID "_rssi");
+        cJSON_AddStringToObject(d, "state_topic",         MQTT_PREFIX "/sensor/rssi/state");
+        cJSON_AddStringToObject(d, "unit_of_measurement", "dBm");
+        cJSON_AddStringToObject(d, "device_class",        "signal_strength");
+        cJSON_AddStringToObject(d, "state_class",         "measurement");
+        cJSON_AddStringToObject(d, "entity_category",     "diagnostic");
+        cJSON_AddStringToObject(d, "icon",                "mdi:wifi");
+        add_avail(d);
+        cJSON_AddItemToObject(d, "device", make_device_json());
+        pub_json(topic, d, 1, 1);
+        cJSON_Delete(d);
+    }
+
+    // ── Uptime ─────────────────────────────────────────────────────────────
+    snprintf(topic, sizeof(topic),
+             MQTT_HA_PREFIX "/sensor/" DEVICE_ID "/uptime/config");
+
+    {
+        cJSON *d = cJSON_CreateObject();
+        cJSON_AddStringToObject(d, "name",                "Uptime");
+        cJSON_AddStringToObject(d, "unique_id",           DEVICE_ID "_uptime");
+        cJSON_AddStringToObject(d, "state_topic",         MQTT_PREFIX "/sensor/uptime/state");
+        cJSON_AddStringToObject(d, "unit_of_measurement", "s");
+        cJSON_AddStringToObject(d, "device_class",        "duration");
+        cJSON_AddStringToObject(d, "state_class",         "total_increasing");
+        cJSON_AddStringToObject(d, "entity_category",     "diagnostic");
+        cJSON_AddStringToObject(d, "icon",                "mdi:timer-outline");
+        add_avail(d);
+        cJSON_AddItemToObject(d, "device", make_device_json());
+        pub_json(topic, d, 1, 1);
+        cJSON_Delete(d);
+    }
+
     ESP_LOGI(TAG, "HA discovery published");
 }
+
+// --------------------------------------------------------------------------
+// Forward declarations
+// --------------------------------------------------------------------------
+
+static void mqtt_publish_group_states(void);
 
 // --------------------------------------------------------------------------
 // Publish section states
@@ -125,12 +298,11 @@ void mqtt_publish_section_state(uint8_t section, bool active)
 {
     if (!s_connected) return;
     char topic[64];
-    if (section == 0) {
+    if (section == 0)
         snprintf(topic, sizeof(topic), MQTT_PREFIX "/section/master/state");
-    } else {
+    else
         snprintf(topic, sizeof(topic), MQTT_PREFIX "/section/%d/state", section);
-    }
-    pub(topic, active ? "ON" : "OFF", 0, 0);
+    pub(topic, active ? "ON" : "OFF", 0, 1);  // retain=1
 }
 
 void mqtt_publish_all_states(void)
@@ -139,30 +311,85 @@ void mqtt_publish_all_states(void)
     uint8_t mask = valve_get_active_mask();
     bool master  = (bool)(leds_get() & BIT_MASTER);
     mqtt_publish_section_state(0, master);
-    for (int i = 1; i <= SECTIONS_COUNT; i++) {
-        mqtt_publish_section_state(i, (bool)(mask & (1 << (i-1))));
+    for (int i = 1; i <= SECTIONS_COUNT; i++)
+        mqtt_publish_section_state(i, (bool)(mask & (1 << (i - 1))));
+    mqtt_publish_group_states();
+}
+
+static void mqtt_publish_group_states(void)
+{
+    if (!s_connected) return;
+    uint8_t active_id = groups_get_active_id();
+    const irrigation_group_t *grps = groups_get_all();
+    for (int i = 0; i < GROUPS_MAX; i++) {
+        if (grps[i].section_mask == 0) continue;
+        char topic[64];
+        snprintf(topic, sizeof(topic), MQTT_PREFIX "/group/%d/state", grps[i].id);
+        pub(topic, (grps[i].id == active_id) ? "ON" : "OFF", 0, 1);
     }
 }
 
 // --------------------------------------------------------------------------
-// Publish status
+// Publish sensor values
+// --------------------------------------------------------------------------
+
+void mqtt_publish_temperature(float temp, bool available)
+{
+    if (!s_connected) return;
+    char buf[32];
+    if (available)
+        snprintf(buf, sizeof(buf), "%.1f", temp);
+    else
+        snprintf(buf, sizeof(buf), "unavailable");
+    pub(MQTT_PREFIX "/sensor/temperature/state", buf, 0, 1);
+}
+
+void mqtt_publish_irrigation_today(bool active)
+{
+    if (!s_connected) return;
+    pub(MQTT_PREFIX "/irrigation/today/state", active ? "ON" : "OFF", 0, 1);
+}
+
+void mqtt_publish_frost_active(bool active)
+{
+    if (!s_connected) return;
+    pub(MQTT_PREFIX "/frost/active/state", active ? "ON" : "OFF", 0, 1);
+}
+
+// --------------------------------------------------------------------------
+// Publish status (co 60s + po połączeniu)
 // --------------------------------------------------------------------------
 
 void mqtt_publish_status(void)
 {
     if (!s_connected) return;
-    char ip[16] = "0.0.0.0";
-    wifi_get_ip(ip, sizeof(ip));
 
-    cJSON *root = cJSON_CreateObject();
-    cJSON_AddBoolToObject(root,   "online",           true);
-    cJSON_AddStringToObject(root, "ip",               ip);
-    cJSON_AddNumberToObject(root, "rssi",             wifi_get_rssi());
-    cJSON_AddBoolToObject(root,   "irrigation_today", g_irrigation_today);
-    cJSON_AddNumberToObject(root, "uptime_sec",
-                            (double)(esp_timer_get_time() / 1000000));
-    pub_json(MQTT_PREFIX "/status", root, 0, 1);
-    cJSON_Delete(root);
+    // Dostępność
+    pub(MQTT_AVAIL_TOPIC, "online", 1, 1);
+
+    // Sensory diagnostyczne
+    {
+        char buf[16];
+        snprintf(buf, sizeof(buf), "%d", wifi_get_rssi());
+        pub(MQTT_PREFIX "/sensor/rssi/state", buf, 0, 1);
+    }
+    {
+        char buf[24];
+        snprintf(buf, sizeof(buf), "%lld",
+                 (long long)(esp_timer_get_time() / 1000000));
+        pub(MQTT_PREFIX "/sensor/uptime/state", buf, 0, 1);
+    }
+
+    // Nawadnianie dziś
+    mqtt_publish_irrigation_today(g_irrigation_today);
+
+    // Ochrona przed mrozem — stan przełącznika
+    pub(MQTT_PREFIX "/frost/protection/state",
+        g_config.frost_protection_enabled ? "ON" : "OFF", 0, 1);
+
+    // Temperatura (jeśli dostępna)
+    if (temperature_available())
+        mqtt_publish_temperature(temperature_get(), true);
 }
 
 // --------------------------------------------------------------------------
@@ -176,11 +403,7 @@ static void handle_command(const char *topic, const char *data, int data_len)
     memcpy(payload, data, data_len);
     payload[data_len] = '\0';
 
-    // ------------------------------------------------------------------
-    // Sekcje
-    // ------------------------------------------------------------------
-
-    // wachciodrop/section/all/command → OFF
+    // ── Wszystkie sekcje OFF ───────────────────────────────────────────────
     if (strstr(topic, "/section/all/command")) {
         if (strcmp(payload, "OFF") == 0) {
             valve_all_off();
@@ -189,7 +412,7 @@ static void handle_command(const char *topic, const char *data, int data_len)
         goto done;
     }
 
-    // wachciodrop/section/{id}/command → ON / OFF / {"on":true,"duration":300}
+    // ── Sekcja {id}/command → ON / OFF / {"on":true,"duration":300} ───────
     {
         int sec_id = 0;
         if (sscanf(topic, MQTT_PREFIX "/section/%d/command", &sec_id) == 1) {
@@ -219,33 +442,59 @@ static void handle_command(const char *topic, const char *data, int data_len)
         }
     }
 
-    // ------------------------------------------------------------------
-    // Grupy
-    // ------------------------------------------------------------------
-
-    // wachciodrop/group/{id}/command → {"on":true,"duration":300}
+    // ── Grupa {id}/command → ON / OFF / {"on":true,"duration":300} ────────
     {
         int grp_id = 0;
         if (sscanf(topic, MQTT_PREFIX "/group/%d/command", &grp_id) == 1) {
-            cJSON *j = cJSON_Parse(payload);
-            if (j) {
-                cJSON *on  = cJSON_GetObjectItem(j, "on");
-                cJSON *dur = cJSON_GetObjectItem(j, "duration");
-                if (cJSON_IsTrue(on)) {
-                    uint32_t duration = dur ? (uint32_t)dur->valuedouble : 0;
-                    groups_activate((uint8_t)grp_id, duration);
-                    mqtt_publish_all_states();
-                } else {
-                    valve_all_off();
-                    mqtt_publish_all_states();
+            bool turn_on   = false;
+            uint32_t dur   = 0;
+
+            if (strcmp(payload, "ON") == 0) {
+                turn_on = true;
+                dur     = 0;   // bezterminowo
+            } else if (strcmp(payload, "OFF") == 0) {
+                turn_on = false;
+            } else {
+                cJSON *j = cJSON_Parse(payload);
+                if (j) {
+                    cJSON *on  = cJSON_GetObjectItem(j, "on");
+                    cJSON *d   = cJSON_GetObjectItem(j, "duration");
+                    turn_on = cJSON_IsTrue(on);
+                    dur     = d ? (uint32_t)d->valuedouble : 0;
+                    cJSON_Delete(j);
                 }
-                cJSON_Delete(j);
             }
+
+            if (turn_on) {
+                groups_activate((uint8_t)grp_id, dur);
+            } else {
+                valve_all_off();
+            }
+            mqtt_publish_all_states();
             goto done;
         }
     }
 
-    // wachciodrop/group/{id}/set → {"name":"Trawnik","section_mask":7}
+    // ── Nawadnianie dziś ───────────────────────────────────────────────────
+    if (strcmp(topic, MQTT_PREFIX "/irrigation/today/command") == 0) {
+        bool active = (strcmp(payload, "ON") == 0);
+        g_irrigation_today         = active;
+        g_config.irrigation_today  = active;
+        storage_save_config(&g_config);
+        mqtt_publish_irrigation_today(active);
+        goto done;
+    }
+
+    // ── Ochrona przed mrozem — włącz/wyłącz ──────────────────────────────
+    if (strcmp(topic, MQTT_PREFIX "/frost/protection/command") == 0) {
+        bool en = (strcmp(payload, "ON") == 0);
+        g_config.frost_protection_enabled = en;
+        storage_save_config(&g_config);
+        pub(MQTT_PREFIX "/frost/protection/state", en ? "ON" : "OFF", 0, 1);
+        goto done;
+    }
+
+    // ── Grupy — konfiguracja ───────────────────────────────────────────────
     {
         int grp_id = 0;
         if (sscanf(topic, MQTT_PREFIX "/group/%d/set", &grp_id) == 1) {
@@ -262,7 +511,6 @@ static void handle_command(const char *topic, const char *data, int data_len)
                     groups_set(&group);
                     cJSON_Delete(j);
 
-                    // Odpowiedź: zaktualizowana lista grup
                     const irrigation_group_t *grps = groups_get_all();
                     cJSON *arr = cJSON_CreateArray();
                     for (int i = 0; i < GROUPS_MAX; i++) {
@@ -280,7 +528,7 @@ static void handle_command(const char *topic, const char *data, int data_len)
         }
     }
 
-    // wachciodrop/groups/get → opublikuj listę grup
+    // ── Grupy — lista ─────────────────────────────────────────────────────
     if (strcmp(topic, MQTT_PREFIX "/groups/get") == 0) {
         const irrigation_group_t *grps = groups_get_all();
         cJSON *arr = cJSON_CreateArray();
@@ -296,11 +544,7 @@ static void handle_command(const char *topic, const char *data, int data_len)
         goto done;
     }
 
-    // ------------------------------------------------------------------
-    // Harmonogram
-    // ------------------------------------------------------------------
-
-    // wachciodrop/schedule/get → opublikuj harmonogram
+    // ── Harmonogram — lista ───────────────────────────────────────────────
     if (strcmp(topic, MQTT_PREFIX "/schedule/get") == 0) {
         const schedule_entry_t *entries = schedule_get_all();
         cJSON *arr = cJSON_CreateArray();
@@ -321,7 +565,7 @@ static void handle_command(const char *topic, const char *data, int data_len)
         goto done;
     }
 
-    // wachciodrop/schedule/set → JSON array (bulk)
+    // ── Harmonogram — bulk set ────────────────────────────────────────────
     if (strcmp(topic, MQTT_PREFIX "/schedule/set") == 0) {
         cJSON *arr = cJSON_Parse(payload);
         if (arr && cJSON_IsArray(arr)) {
@@ -344,7 +588,7 @@ static void handle_command(const char *topic, const char *data, int data_len)
         goto done;
     }
 
-    // wachciodrop/schedule/{id}/set → pojedynczy wpis
+    // ── Harmonogram — single set ──────────────────────────────────────────
     {
         int sched_id = -1;
         if (sscanf(topic, MQTT_PREFIX "/schedule/%d/set", &sched_id) == 1) {
@@ -370,7 +614,7 @@ static void handle_command(const char *topic, const char *data, int data_len)
         }
     }
 
-    // wachciodrop/schedule/{id}/delete
+    // ── Harmonogram — delete ──────────────────────────────────────────────
     {
         int sched_id = -1;
         if (sscanf(topic, MQTT_PREFIX "/schedule/%d/delete", &sched_id) == 1) {
@@ -382,11 +626,7 @@ static void handle_command(const char *topic, const char *data, int data_len)
         }
     }
 
-    // ------------------------------------------------------------------
-    // Czas
-    // ------------------------------------------------------------------
-
-    // wachciodrop/time/get → opublikuj czas
+    // ── Czas — get ────────────────────────────────────────────────────────
     if (strcmp(topic, MQTT_PREFIX "/time/get") == 0) {
         time_t now = time(NULL);
         struct tm t_local;
@@ -402,7 +642,7 @@ static void handle_command(const char *topic, const char *data, int data_len)
         goto done;
     }
 
-    // wachciodrop/time/set → {"unix":...} / {"datetime":"..."} / {year,month,...}
+    // ── Czas — set ────────────────────────────────────────────────────────
     if (strcmp(topic, MQTT_PREFIX "/time/set") == 0) {
         cJSON *j = cJSON_Parse(payload);
         if (j) {
@@ -410,8 +650,7 @@ static void handle_command(const char *topic, const char *data, int data_len)
             cJSON *v;
             if ((v = cJSON_GetObjectItem(j, "unix")) != NULL) {
                 t = (time_t)(long long)v->valuedouble;
-            } else if ((v = cJSON_GetObjectItem(j, "datetime")) != NULL
-                       && v->valuestring) {
+            } else if ((v = cJSON_GetObjectItem(j, "datetime")) != NULL && v->valuestring) {
                 struct tm tm = {0};
                 if (strptime(v->valuestring, "%Y-%m-%dT%H:%M:%S", &tm)) {
                     tm.tm_isdst = -1;
@@ -439,7 +678,6 @@ static void handle_command(const char *topic, const char *data, int data_len)
             cJSON_Delete(j);
             if (t > 0) {
                 rtc_set_time_unix(t);
-                // Odpowiedź z potwierdzeniem
                 struct tm t_local;
                 localtime_r(&t, &t_local);
                 char tstr[32];
@@ -455,7 +693,7 @@ static void handle_command(const char *topic, const char *data, int data_len)
         goto done;
     }
 
-    // wachciodrop/time/sntp → wymuś synchronizację NTP
+    // ── Czas — NTP sync ───────────────────────────────────────────────────
     if (strcmp(topic, MQTT_PREFIX "/time/sntp") == 0) {
         esp_err_t err = ntp_force_sync();
         cJSON *resp = cJSON_CreateObject();
@@ -478,11 +716,7 @@ static void handle_command(const char *topic, const char *data, int data_len)
         goto done;
     }
 
-    // ------------------------------------------------------------------
-    // Ustawienia
-    // ------------------------------------------------------------------
-
-    // wachciodrop/settings/get → opublikuj ustawienia (bez haseł)
+    // ── Ustawienia — get ──────────────────────────────────────────────────
     if (strcmp(topic, MQTT_PREFIX "/settings/get") == 0) {
         cJSON *root = cJSON_CreateObject();
         cJSON_AddStringToObject(root, "wifi_ssid",  g_config.wifi_ssid);
@@ -496,7 +730,7 @@ static void handle_command(const char *topic, const char *data, int data_len)
         goto done;
     }
 
-    // wachciodrop/settings/set → zaktualizuj ustawienia (pola opcjonalne)
+    // ── Ustawienia — set ──────────────────────────────────────────────────
     if (strcmp(topic, MQTT_PREFIX "/settings/set") == 0) {
         cJSON *j = cJSON_Parse(payload);
         if (j) {
@@ -549,6 +783,10 @@ static void mqtt_event_handler(void *arg, esp_event_base_t base,
         esp_mqtt_client_subscribe(s_client, MQTT_PREFIX "/group/+/set", 0);
         esp_mqtt_client_subscribe(s_client, MQTT_PREFIX "/groups/get", 0);
 
+        // Nawadnianie dziś + ochrona przed mrozem
+        esp_mqtt_client_subscribe(s_client, MQTT_PREFIX "/irrigation/today/command", 0);
+        esp_mqtt_client_subscribe(s_client, MQTT_PREFIX "/frost/protection/command", 0);
+
         // Harmonogram
         esp_mqtt_client_subscribe(s_client, MQTT_PREFIX "/schedule/get", 0);
         esp_mqtt_client_subscribe(s_client, MQTT_PREFIX "/schedule/set", 0);
@@ -564,6 +802,8 @@ static void mqtt_event_handler(void *arg, esp_event_base_t base,
         esp_mqtt_client_subscribe(s_client, MQTT_PREFIX "/settings/get", 0);
         esp_mqtt_client_subscribe(s_client, MQTT_PREFIX "/settings/set", 0);
 
+        // Publikuj wszystko
+        pub(MQTT_AVAIL_TOPIC, "online", 1, 1);
         publish_ha_discovery();
         mqtt_publish_all_states();
         mqtt_publish_status();
@@ -580,27 +820,32 @@ static void mqtt_event_handler(void *arg, esp_event_base_t base,
             int tlen = evt->topic_len < (int)sizeof(topic) - 1
                        ? evt->topic_len : (int)sizeof(topic) - 1;
             strncpy(topic, evt->topic, tlen);
-            const char *data = (evt->data && evt->data_len > 0) ? evt->data : "";
-            handle_command(topic, data, evt->data_len > 0 ? evt->data_len : 0);
+            const char *d = (evt->data && evt->data_len > 0) ? evt->data : "";
+            handle_command(topic, d, evt->data_len > 0 ? evt->data_len : 0);
         }
         break;
 
     case MQTT_EVENT_ERROR:
         ESP_LOGE(TAG, "error");
         break;
+
     default:
         break;
     }
 }
 
 // --------------------------------------------------------------------------
-// Init & task
+// Valve state callback
 // --------------------------------------------------------------------------
 
 static void on_valve_state_changed(void)
 {
     mqtt_publish_all_states();
 }
+
+// --------------------------------------------------------------------------
+// Init & task
+// --------------------------------------------------------------------------
 
 esp_err_t mqtt_manager_init(void)
 {
@@ -614,9 +859,8 @@ void mqtt_manager_task(void *arg)
 {
     ESP_LOGI(TAG, "task started");
 
-    while (wifi_get_state() != WIFI_STATE_CONNECTED) {
+    while (wifi_get_state() != WIFI_STATE_CONNECTED)
         vTaskDelay(pdMS_TO_TICKS(2000));
-    }
 
     if (g_config.mqtt_uri[0] == '\0') {
         ESP_LOGI(TAG, "no MQTT URI configured, task exit");
@@ -628,13 +872,13 @@ void mqtt_manager_task(void *arg)
         .broker.address.uri      = g_config.mqtt_uri,
         .credentials.username    = g_config.mqtt_user,
         .credentials.authentication.password = g_config.mqtt_pass,
-        .session.keepalive       = 60,
-        .session.last_will.topic = MQTT_PREFIX "/status",
-        .session.last_will.msg   = "{\"online\":false}",
-        .session.last_will.qos   = 1,
+        .session.keepalive        = 60,
+        .session.last_will.topic  = MQTT_AVAIL_TOPIC,
+        .session.last_will.msg    = "offline",
+        .session.last_will.qos    = 1,
         .session.last_will.retain = 1,
-        .buffer.size             = 4096,
-        .buffer.out_size         = 4096,
+        .buffer.size              = 4096,
+        .buffer.out_size          = 4096,
     };
 
     s_client = esp_mqtt_client_init(&cfg);

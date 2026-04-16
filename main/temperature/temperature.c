@@ -3,6 +3,7 @@
 #include "logging/log_manager.h"
 #include "storage/nvs_storage.h"
 #include "valve/valve.h"
+#include "mqtt/mqtt_manager.h"
 #include "ds18x20.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
@@ -83,6 +84,7 @@ void temperature_task(void *arg)
         if (err == ESP_OK) {
             s_temp = temp;
             ESP_LOGD(TAG, "%.2f °C", temp);
+            mqtt_publish_temperature(temp, true);
 
             if (g_config.frost_protection_enabled) {
                 float thr = (float)g_config.frost_temp_threshold;
@@ -94,6 +96,7 @@ void temperature_task(void *arg)
                     if (!s_frost_active) {
                         // Nowe zdarzenie mrozu
                         s_frost_active = true;
+                        mqtt_publish_frost_active(true);
                         ESP_LOGW(TAG, "frost: %.1f°C < %.0f°C — disabling irrigation",
                                  temp, thr);
                         APP_LOGI("temp",
@@ -119,6 +122,7 @@ void temperature_task(void *arg)
                     if (s_recovery_sec >= delay_sec) {
                         s_frost_active = false;
                         s_recovery_sec = 0;
+                        mqtt_publish_frost_active(false);
 
                         if (s_frost_disabled) {
                             s_frost_disabled = false;
@@ -137,6 +141,7 @@ void temperature_task(void *arg)
             ESP_LOGW(TAG, "read error: %s", esp_err_to_name(err));
             // Po kilku błędach z rzędu oznacz jako niedostępny
             s_available = false;
+            mqtt_publish_temperature(0, false);
             APP_LOGI("temp", "DS18B20 utracony, ponawiam wykrywanie");
         }
     }
