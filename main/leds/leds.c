@@ -13,7 +13,7 @@ static void shift_out(uint16_t data)
 {
     // Wyślij 16 bitów MSB-first przez bit-bang
     // Sekwencja: SER → data bit, SRCLK ↑ → shift, po 16 bitach RCLK ↑ → latch
-    data = ~data;  // active-low: inwertuj — bit=1 w logice → LOW na wyjściu
+    // active-high: bit=1 w logice → HIGH na wyjściu
     for (int i = 15; i >= 0; i--) {
         gpio_set_level(PIN_595_SER, (data >> i) & 1);
         gpio_set_level(PIN_595_SRCLK, 1);
