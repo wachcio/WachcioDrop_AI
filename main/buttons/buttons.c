@@ -8,17 +8,15 @@
 
 static const char *TAG = "buttons";
 
-#define LONG_PRESS_MS           1000
 #define BUTTONS_QUEUE_SIZE      16
 #define STARTUP_IGNORE_MS       500
 
 static QueueHandle_t s_queue;
 
-// Stan przycisków SELECT i BACK (mierzą czas dotyku)
-static volatile int64_t s_select_press_time = 0;
-static volatile bool    s_select_pressed    = false;
-static volatile int64_t s_back_press_time   = 0;
-static volatile bool    s_back_pressed      = false;
+// Stan przycisków SELECT i BACK
+static volatile bool    s_select_pressed  = false;
+static volatile int64_t s_back_press_time = 0;
+static volatile bool    s_back_pressed    = false;
 
 static void IRAM_ATTR gpio_isr_handler(void *arg)
 {
@@ -42,19 +40,13 @@ static void IRAM_ATTR gpio_isr_handler(void *arg)
         }
 
     } else if (gpio == PIN_BTN_SELECT) {
-        int level = gpio_get_level(PIN_BTN_SELECT);
-        if (level == 1) {
-            s_select_press_time = now;
-            s_select_pressed    = true;
-        } else {
-            if (s_select_pressed) {
-                int64_t held_ms = (now - s_select_press_time) / 1000;
-                encoder_event_t evt = (held_ms >= LONG_PRESS_MS)
-                                      ? ENCODER_EVENT_LONG
-                                      : ENCODER_EVENT_PRESS;
-                xQueueSendFromISR(s_queue, &evt, &higher_woken);
-                s_select_pressed = false;
-            }
+        // Tylko zatwierdź — zawsze PRESS niezależnie od czasu trzymania
+        if (gpio_get_level(PIN_BTN_SELECT) == 0 && s_select_pressed) {
+            encoder_event_t evt = ENCODER_EVENT_PRESS;
+            xQueueSendFromISR(s_queue, &evt, &higher_woken);
+            s_select_pressed = false;
+        } else if (gpio_get_level(PIN_BTN_SELECT) == 1) {
+            s_select_pressed = true;
         }
 
     } else if (gpio == PIN_BTN_BACK) {
