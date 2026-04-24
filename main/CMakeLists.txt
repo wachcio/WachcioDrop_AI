@@ -4,7 +4,7 @@ idf_component_register(
         "leds/leds.c"
         "valve/valve.c"
         "rtc/rtc.c"
-        "encoder/encoder.c"
+        "buttons/buttons.c"
         "display/display.c"
         "display/menu.c"
         "storage/nvs_storage.c"

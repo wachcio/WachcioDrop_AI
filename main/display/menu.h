@@ -1,10 +1,9 @@
 #pragma once
 #include "esp_err.h"
-#include "encoder/encoder.h"
+#include "buttons/buttons.h"
 
 // System menu dla OLED 128x64
-// Nawigacja: enkoder lewo/prawo = poruszanie po menu, przycisk = wybór/wejście
-// Długie wciśnięcie = wyjście/anuluj
+// Nawigacja: przyciski UP/DOWN = poruszanie, SELECT = wybór, BACK = wyjście/anuluj
 
 typedef enum {
     MENU_SCREEN_HOME = 0,   // ekran główny: czas, stan sekcji, WiFi

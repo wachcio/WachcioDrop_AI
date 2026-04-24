@@ -4,7 +4,7 @@
 #include "leds/leds.h"
 #include "rtc/rtc.h"
 #include "wifi/wifi_manager.h"
-#include "encoder/encoder.h"
+#include "buttons/buttons.h"
 #include "storage/nvs_storage.h"
 #include "config.h"
 #include "temperature/temperature.h"
@@ -256,13 +256,21 @@ void menu_handle_event(encoder_event_t evt)
 
 void menu_task(void *arg)
 {
-    QueueHandle_t enc_queue = encoder_get_queue();
+    QueueHandle_t enc_queue = buttons_get_queue();
     ESP_LOGI(TAG, "task started");
 
     while (1) {
-        // Obsłuż zdarzenia enkodera (nieblokująco)
+        // Obsłuż zdarzenia przycisków (nieblokująco)
         encoder_event_t evt;
         while (xQueueReceive(enc_queue, &evt, 0) == pdTRUE) {
+            if (evt == ENCODER_EVENT_FACTORY_RESET) {
+                display_clear();
+                display_text_full(2, " FACTORY RESET  ", true);
+                display_text_full(3, " Restarting...  ", false);
+                display_update();
+                vTaskDelay(pdMS_TO_TICKS(1500));
+                storage_factory_reset();  // nie wraca
+            }
             menu_handle_event(evt);
         }
 

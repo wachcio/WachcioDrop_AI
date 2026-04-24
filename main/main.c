@@ -2,7 +2,7 @@
 #include "leds/leds.h"
 #include "valve/valve.h"
 #include "rtc/rtc.h"
-#include "encoder/encoder.h"
+#include "buttons/buttons.h"
 #include "display/display.h"
 #include "display/menu.h"
 #include "storage/nvs_storage.h"
@@ -87,9 +87,9 @@ void app_main(void)
     temperature_init();
 
     // ------------------------------------------------------------------
-    // 5. Enkoder
+    // 5. Przyciski dotykowe TTP223
     // ------------------------------------------------------------------
-    ESP_ERROR_CHECK(encoder_init());
+    ESP_ERROR_CHECK(buttons_init());
 
     // ------------------------------------------------------------------
     // 6. Wyświetlacz OLED SSD1306 SPI

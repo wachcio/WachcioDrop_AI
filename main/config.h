@@ -17,10 +17,14 @@
 #define I2C_PORT            I2C_NUM_0
 #define I2C_FREQ_HZ         100000
 
-// Rotary Encoder
-#define PIN_ENC_A           4
-#define PIN_ENC_B           5
-#define PIN_ENC_SW          6
+// Przyciski dotykowe TTP223 (active-high: HIGH = dotknięty)
+#define PIN_BTN_UP          4
+#define PIN_BTN_DOWN        5
+#define PIN_BTN_SELECT      6
+#define PIN_BTN_BACK        13
+
+// Czas przytrzymania BACK dla factory reset
+#define FACTORY_RESET_HOLD_MS   10000
 
 // 74HC595 Shift Register (x2 daisy-chain - 16 bitów)
 // Steruje jednocześnie: LED-ami + SSR relay (zawory)
@@ -83,7 +87,7 @@
 // =============================================================================
 #define TASK_PRIO_VALVE         6
 #define TASK_PRIO_SCHEDULER     5
-#define TASK_PRIO_ENCODER       4
+#define TASK_PRIO_BUTTONS       4
 #define TASK_PRIO_WIFI          4
 #define TASK_PRIO_DISPLAY       3
 #define TASK_PRIO_MQTT          3
@@ -94,7 +98,7 @@
 
 #define TASK_STACK_VALVE        2048
 #define TASK_STACK_SCHEDULER    4096
-#define TASK_STACK_ENCODER      2048
+#define TASK_STACK_BUTTONS      2048
 #define TASK_STACK_DISPLAY      4096
 #define TASK_STACK_LEDS         2048
 #define TASK_STACK_WIFI         4096

@@ -4,6 +4,7 @@
 #include "nvs.h"
 #include "esp_log.h"
 #include "esp_random.h"
+#include "esp_system.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -275,4 +276,18 @@ esp_err_t storage_generate_token(char *out, size_t len)
     }
     out[bytes * 2] = '\0';
     return ESP_OK;
+}
+
+esp_err_t storage_factory_reset(void)
+{
+    ESP_LOGW(TAG, "FACTORY RESET — kasowanie namespace cfg");
+    nvs_handle_t h;
+    if (nvs_open(NVS_NAMESPACE_CONFIG, NVS_READWRITE, &h) == ESP_OK) {
+        nvs_erase_all(h);
+        nvs_commit(h);
+        nvs_close(h);
+    }
+    ESP_LOGW(TAG, "restart...");
+    esp_restart();
+    return ESP_OK;  // nieosiągalne
 }

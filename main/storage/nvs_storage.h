@@ -84,3 +84,7 @@ esp_err_t storage_save_group(const irrigation_group_t *group);
 
 // Generowanie losowego tokenu API (32 znaki hex)
 esp_err_t storage_generate_token(char *out, size_t len);
+
+// Factory reset: kasuje namespace "cfg" (WiFi, MQTT, ustawienia) i restartuje
+// Harmonogram i grupy pozostają nienaruszone. Funkcja nie wraca (esp_restart).
+esp_err_t storage_factory_reset(void);
