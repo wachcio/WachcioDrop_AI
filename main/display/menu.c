@@ -80,7 +80,7 @@ static void draw_home(void)
 
     display_text_full(5, "", false);
     display_text_full(6, "", false);
-    display_text_full(7, "Pokret=menu", false);
+    display_text_full(7, "OK=menu", false);
 }
 
 static void draw_main_menu(void)
@@ -100,7 +100,7 @@ static void draw_main_menu(void)
         }
     }
     display_text_full(6, "", false);
-    display_text_full(7, "LNG=powrot", false);
+    display_text_full(7, "ESC=powrot", false);
 }
 
 static void draw_manual(void)
@@ -133,7 +133,7 @@ static void draw_manual(void)
         }
         display_text_full(i + 1, buf, sec_idx == s_cursor);
     }
-    display_text_full(7, "OK=30min BCK=wyjdz", false);
+    display_text_full(7, "OK=30min ESC=wyjdz", false);
 }
 
 static void draw_info(void)
@@ -171,7 +171,7 @@ static void draw_info(void)
     char tokbuf[20] = "Token:";
     strncat(tokbuf, g_config.api_token, sizeof(tokbuf) - 7);
     display_text_full(6, tokbuf, false);
-    display_text_full(7, "LNG=wyjdz", false);
+    display_text_full(7, "ESC=wyjdz", false);
 }
 
 // --------------------------------------------------------------------------
