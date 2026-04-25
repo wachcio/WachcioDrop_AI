@@ -7,6 +7,23 @@
 static const char *TAG = "display";
 static SSD1306_t s_dev;
 
+// Shadow buffer — przechowuje ostatnio wysłaną treść każdego wiersza.
+// display_text_full() wysyła do OLED tylko wiersze które się zmieniły,
+// eliminując miganie wynikające z cyklicznego odświeżania całego ekranu.
+typedef struct {
+    char text[DISPLAY_COLS + 1];
+    bool invert;
+} shadow_row_t;
+
+static shadow_row_t s_shadow[DISPLAY_ROWS];
+static bool s_shadow_valid = false;
+
+static void shadow_invalidate(void)
+{
+    memset(s_shadow, 0, sizeof(s_shadow));
+    s_shadow_valid = true;
+}
+
 esp_err_t display_init(void)
 {
     // Inicjalizacja SSD1306 przez SPI2
@@ -21,6 +38,7 @@ esp_err_t display_init(void)
     ssd1306_init(&s_dev, DISPLAY_W, DISPLAY_H);
     ssd1306_clear_screen(&s_dev, false);
     ssd1306_contrast(&s_dev, 0xFF);
+    shadow_invalidate();
 
     ESP_LOGI(TAG, "init OK (%dx%d SPI MOSI=%d CLK=%d CS=%d DC=%d RST=%d)",
              DISPLAY_W, DISPLAY_H,
@@ -31,6 +49,7 @@ esp_err_t display_init(void)
 void display_clear(void)
 {
     ssd1306_clear_screen(&s_dev, false);
+    shadow_invalidate();
 }
 
 void display_update(void)
@@ -46,12 +65,24 @@ void display_text(int col, int row, const char *text, bool invert)
 
 void display_text_full(int row, const char *text, bool invert)
 {
+    if (row < 0 || row >= DISPLAY_ROWS) return;
+
     char buf[DISPLAY_COLS + 1];
     int len = (int)strlen(text);
     if (len > DISPLAY_COLS) len = DISPLAY_COLS;
     memcpy(buf, text, len);
     memset(buf + len, ' ', DISPLAY_COLS - len);
     buf[DISPLAY_COLS] = '\0';
+
+    // Wyślij do OLED tylko jeśli treść lub inwersja się zmieniły
+    if (s_shadow_valid &&
+        s_shadow[row].invert == invert &&
+        memcmp(s_shadow[row].text, buf, DISPLAY_COLS) == 0) {
+        return;
+    }
+
+    memcpy(s_shadow[row].text, buf, DISPLAY_COLS + 1);
+    s_shadow[row].invert = invert;
     ssd1306_display_text(&s_dev, row, buf, DISPLAY_COLS, invert);
 }
 
