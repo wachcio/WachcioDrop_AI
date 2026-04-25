@@ -9,10 +9,7 @@ typedef enum {
     MENU_SCREEN_HOME = 0,   // ekran główny: czas, stan sekcji, WiFi
     MENU_SCREEN_MAIN,       // główne menu
     MENU_SCREEN_MANUAL,     // ręczne sterowanie sekcjami
-    MENU_SCREEN_SCHEDULE,   // podgląd harmonogramu
-    MENU_SCREEN_GROUPS,     // podgląd grup
     MENU_SCREEN_INFO,       // informacje: IP, RSSI, uptime
-    MENU_SCREEN_SETTINGS,   // ustawienia lokalne (jasność)
 } menu_screen_t;
 
 esp_err_t menu_init(void);

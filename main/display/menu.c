@@ -27,14 +27,12 @@ static int           s_scroll     = 0;  // dla list dłuższych niż ekran
 // Pozycje menu głównego
 static const char *MAIN_MENU[] = {
     "Reczne",
-    "Harmonogram",
-    "Grupy",
     "Informacje",
-    "Ustawienia",
     NULL
 };
-#define MAIN_MENU_COUNT 5
-#define MENU_VISIBLE_ROWS 5  // wiersze 1-5 (wiersz 0 = nagłówek)
+#define MAIN_MENU_COUNT   2
+#define MENU_VISIBLE_ROWS 5   // wiersze 1-5 (wiersz 0 = nagłówek)
+#define MANUAL_VISIBLE    6   // wiersze 1-6 widoczne w trybie ręcznym
 
 // --------------------------------------------------------------------------
 // Ekrany
@@ -108,30 +106,34 @@ static void draw_main_menu(void)
 static void draw_manual(void)
 {
     display_text_full(0, "Reczne sterowanie", false);
-    display_text_full(1, "----------------", false);
 
     uint8_t mask = valve_get_active_mask();
-    for (int i = 0; i < SECTIONS_COUNT && i < 6; i++) {
-        char buf[18];
-        uint32_t rem = valve_get_remaining_sec(i + 1);
-        if (mask & (1 << i)) {
+    for (int i = 0; i < MANUAL_VISIBLE; i++) {
+        int sec_idx = s_scroll + i;
+        char buf[32];
+        if (sec_idx >= SECTIONS_COUNT) {
+            display_text_full(i + 1, "", false);
+            continue;
+        }
+        uint32_t rem = valve_get_remaining_sec(sec_idx + 1);
+        if (mask & (1 << sec_idx)) {
             if (rem > 0) {
                 snprintf(buf, sizeof(buf), "%sS%d: %02lu:%02lu",
-                         (i == s_cursor) ? ">" : " ",
-                         i + 1,
+                         (sec_idx == s_cursor) ? ">" : " ",
+                         sec_idx + 1,
                          (unsigned long)(rem / 60),
                          (unsigned long)(rem % 60));
             } else {
                 snprintf(buf, sizeof(buf), "%sSekcja %d: ON ",
-                         (i == s_cursor) ? ">" : " ", i + 1);
+                         (sec_idx == s_cursor) ? ">" : " ", sec_idx + 1);
             }
         } else {
             snprintf(buf, sizeof(buf), "%sSekcja %d: OFF",
-                     (i == s_cursor) ? ">" : " ", i + 1);
+                     (sec_idx == s_cursor) ? ">" : " ", sec_idx + 1);
         }
-        display_text_full(i + 1, buf, i == s_cursor);
+        display_text_full(i + 1, buf, sec_idx == s_cursor);
     }
-    display_text_full(7, "SW=30min LNG=wyjdz", false);
+    display_text_full(7, "OK=30min BCK=wyjdz", false);
 }
 
 static void draw_info(void)
@@ -198,23 +200,13 @@ void menu_handle_event(encoder_event_t evt)
 
     case MENU_SCREEN_MAIN:
         if (evt == ENCODER_EVENT_RIGHT) {
-            if (s_cursor < MAIN_MENU_COUNT - 1) {
-                s_cursor++;
-                if (s_cursor >= s_scroll + MENU_VISIBLE_ROWS)
-                    s_scroll++;
-            }
+            if (s_cursor < MAIN_MENU_COUNT - 1) s_cursor++;
         } else if (evt == ENCODER_EVENT_LEFT) {
-            if (s_cursor > 0) {
-                s_cursor--;
-                if (s_cursor < s_scroll) s_scroll--;
-            }
+            if (s_cursor > 0) s_cursor--;
         } else if (evt == ENCODER_EVENT_PRESS) {
             switch (s_cursor) {
-            case 0: s_screen = MENU_SCREEN_MANUAL;   break;
-            case 1: s_screen = MENU_SCREEN_SCHEDULE; break;
-            case 2: s_screen = MENU_SCREEN_GROUPS;   break;
-            case 3: s_screen = MENU_SCREEN_INFO;      break;
-            case 4: s_screen = MENU_SCREEN_SETTINGS;  break;
+            case 0: s_screen = MENU_SCREEN_MANUAL; break;
+            case 1: s_screen = MENU_SCREEN_INFO;   break;
             }
             s_cursor = 0;
             s_scroll = 0;
@@ -226,8 +218,10 @@ void menu_handle_event(encoder_event_t evt)
     case MENU_SCREEN_MANUAL:
         if (evt == ENCODER_EVENT_RIGHT && s_cursor < SECTIONS_COUNT - 1) {
             s_cursor++;
+            if (s_cursor >= s_scroll + MANUAL_VISIBLE) s_scroll++;
         } else if (evt == ENCODER_EVENT_LEFT && s_cursor > 0) {
             s_cursor--;
+            if (s_cursor < s_scroll) s_scroll--;
         } else if (evt == ENCODER_EVENT_PRESS) {
             uint8_t sec = s_cursor + 1;
             if (valve_is_section_active(sec)) {
@@ -241,9 +235,6 @@ void menu_handle_event(encoder_event_t evt)
         break;
 
     case MENU_SCREEN_INFO:
-    case MENU_SCREEN_SCHEDULE:
-    case MENU_SCREEN_GROUPS:
-    case MENU_SCREEN_SETTINGS:
         if (evt == ENCODER_EVENT_LONG || evt == ENCODER_EVENT_PRESS) {
             s_screen = MENU_SCREEN_HOME;
         }
@@ -281,17 +272,7 @@ void menu_task(void *arg)
         case MENU_SCREEN_MAIN:     draw_main_menu(); break;
         case MENU_SCREEN_MANUAL:   draw_manual();    break;
         case MENU_SCREEN_INFO:     draw_info();      break;
-        default:
-            // Harmonogram / Grupy / Ustawienia — sterowanie przez WWW
-            display_text_full(0, "", false);
-            display_text_full(1, "", false);
-            display_text_full(2, "", false);
-            display_text_full(3, " Uzyj aplikacji", false);
-            display_text_full(4, " webowej (WWW)", false);
-            display_text_full(5, "", false);
-            display_text_full(6, "", false);
-            display_text_full(7, "LNG=powrot", false);
-            break;
+        default:                                      break;
         }
 
         vTaskDelay(pdMS_TO_TICKS(100)); // 10Hz
