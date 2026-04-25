@@ -245,15 +245,19 @@ void menu_handle_event(encoder_event_t evt)
     }
 }
 
+#define MENU_IDLE_TIMEOUT_US  (5 * 60 * 1000000LL)  // 5 minut w µs
+
 void menu_task(void *arg)
 {
     QueueHandle_t enc_queue = buttons_get_queue();
+    int64_t last_activity = esp_timer_get_time();
     ESP_LOGI(TAG, "task started");
 
     while (1) {
         // Obsłuż zdarzenia przycisków (nieblokująco)
         encoder_event_t evt;
         while (xQueueReceive(enc_queue, &evt, 0) == pdTRUE) {
+            last_activity = esp_timer_get_time();
             if (evt == ENCODER_EVENT_FACTORY_RESET) {
                 display_clear();
                 display_text_full(2, " FACTORY RESET  ", true);
@@ -263,6 +267,14 @@ void menu_task(void *arg)
                 storage_factory_reset();  // nie wraca
             }
             menu_handle_event(evt);
+        }
+
+        // Powrót do ekranu głównego po 5 min bezczynności
+        if (s_screen != MENU_SCREEN_HOME &&
+            esp_timer_get_time() - last_activity >= MENU_IDLE_TIMEOUT_US) {
+            s_screen = MENU_SCREEN_HOME;
+            s_cursor = 0;
+            s_scroll = 0;
         }
 
 
